@@ -87,7 +87,7 @@ th{color:var(--muted)}
     <div class="role-box">
       <label for="userSwitcher">👤 Akun / Peran Aktif:</label>
       <select id="userSwitcher"></select>
-      <button class="btn alt sm" style="width:100%;margin-top:8px;background:#164a3d;color:#d8e9e1;border-color:#315b50" id="btnSettings">⚙️ Koneksi Database</button>
+      <button class="btn alt sm hidden" style="width:100%;margin-top:8px;background:#164a3d;color:#d8e9e1;border-color:#315b50" id="btnSettings">⚙️ Koneksi Database</button>
       <div class="muted" style="color:#b7d5c8;margin-top:10px;font-size:11px">Sistem Pengaduan Internal</div>
     </div>
   </aside>
@@ -281,7 +281,10 @@ function fail(e) {
   const msg = (e && e.message) ? e.message : String(e);
   $('error').textContent = msg;
   $('error').classList.remove('hidden');
-  if (/PIN/.test(msg)) { resetToGuest(); refresh(); }
+  if (/PIN/.test(msg)) {
+    resetToGuest();
+    refresh(() => { $('error').textContent = msg; $('error').classList.remove('hidden'); });
+  }
 }
 function clearError() {
   $('error').classList.add('hidden');
@@ -293,7 +296,7 @@ function getApiUrl() {
 
 function getCurrentDemoUser() {
   const savedEmail = localStorage.getItem(USER_KEY);
-  const list = knownUsers.length ? knownUsers : DEMO_USERS;
+  const list = [DEMO_USERS[0], ...(knownUsers.length ? knownUsers : DEMO_USERS).filter(x => x.role !== 'KARYAWAN')];
   const u = list.find(x => x.email === savedEmail) || DEMO_USERS[0];
   return { ...u, pin: sessionStorage.getItem(PIN_KEY) || '' };
 }
@@ -306,7 +309,9 @@ function resetToGuest() {
 
 function initUserSwitcher() {
   const current = getCurrentDemoUser();
-  const list = knownUsers.length ? knownUsers : DEMO_USERS;
+  const guest = DEMO_USERS[0];
+  const staffList = (knownUsers.length ? knownUsers : DEMO_USERS).filter(u => u.role !== 'KARYAWAN');
+  const list = [{ email: guest.email, name: 'Karyawan', dept: 'Umum', role: 'KARYAWAN' }, ...staffList];
   const label = u => u.role === 'KARYAWAN' ? 'Karyawan (Umum)' : `${u.name} (${u.role})`;
   $('userSwitcher').innerHTML = list.map(u =>
     `<option value="${esc(u.email)}" ${u.email === current.email ? 'selected' : ''}>${esc(label(u))}</option>`
@@ -807,6 +812,9 @@ document.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => setCatego
 $('quick').onclick = () => go('form');
 $('date').value = new Date().toISOString().slice(0, 10);
 setCategory('Operasional');
+// Saat aplikasi dibuka selalu mulai sebagai Karyawan (umum); staf harus memilih akun & PIN lagi
+localStorage.setItem(USER_KEY, DEMO_USERS[0].email);
+sessionStorage.removeItem(PIN_KEY);
 initUserSwitcher();
 
 $('form').onsubmit = e => {
