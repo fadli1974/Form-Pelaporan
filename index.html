@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DUMPEDIA — Sistem Pengaduan & KPI</title>
+<style>
+:root{--green:#0c3b30;--green2:#12634d;--line:#dce5e1;--muted:#687a73;--bg:#f5f8f6}
+*{box-sizing:border-box}
+body{margin:0;font:14px Arial,sans-serif;background:var(--bg);color:#19352c}
+.layout{min-height:100vh;display:flex}
+.side{width:240px;background:var(--green);color:white;padding:20px 12px;display:flex;flex-direction:column}
+.brand{font-size:20px;font-weight:bold;padding:5px 10px 20px;border-bottom:1px solid #315b50;margin-bottom:16px}
+.brand small{display:block;font-size:11px;font-weight:normal;color:#b7d5c8;margin-top:5px}
+.nav{width:100%;border:0;background:none;color:#d8e9e1;padding:12px 10px;text-align:left;border-radius:7px;cursor:pointer;margin:2px 0;font-size:13px}
+.nav.active,.nav:hover{background:#205447;border-left:3px solid #19c99a}
+.main{flex:1;min-width:0;padding:25px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.top h2{margin:3px 0;font-size:23px}
+.crumb{font-size:11px;color:#72827b;display:flex;align-items:center;gap:8px}
+.badge-mode{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;background:#e0f4e9;color:#126344}
+.card{background:white;border:1px solid var(--line);border-radius:11px;padding:16px;margin-bottom:13px}
+.muted{color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat{font-size:27px;font-weight:bold;margin-top:8px}
+.btn{border:0;background:var(--green2);color:white;padding:10px 14px;border-radius:7px;cursor:pointer;font-weight:bold;font-size:13px}
+.btn:hover{opacity:.92}
+.btn.alt{background:white;color:#19352c;border:1px solid var(--line)}
+.btn.sm{padding:6px 10px;font-size:12px}
+input,select,textarea{width:100%;border:1px solid #cfdad4;border-radius:7px;padding:10px;font:inherit;background:white;color:#19352c}
+textarea{min-height:90px;resize:vertical}
+.field{display:grid;gap:6px;margin:12px 0}
+label{font-size:12px;font-weight:bold}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cat{background:white;border:1px solid var(--line);padding:15px;border-radius:10px;text-align:left;cursor:pointer;color:#19352c}
+.cat.selected{border:2px solid #159b75;background:#f0faf5}
+.pill{padding:4px 8px;border-radius:20px;font-size:10px;font-weight:bold;display:inline-block}
+.green{background:#d9f4e8;color:#126344}
+.amber{background:#fff0d6;color:#92600c}
+.blue{background:#dceaff;color:#285b9b}
+.red{background:#ffe1df;color:#a42c2c}
+.hidden{display:none!important}
+.tablewrap{overflow:auto;margin-top:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:11px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--muted)}
+.notice{background:#f4f8f6;border:1px solid var(--line);padding:11px;border-radius:8px;margin:8px 0}
+.timeline{border-left:2px solid #159b75;padding-left:15px;margin-left:5px}
+.bubble{padding:10px;border-radius:8px;background:#f2f6f4;margin:8px 0}
+.bubble.mine{background:#e0f4e9;margin-left:25px}
+.toast{position:fixed;bottom:18px;right:18px;background:#145d47;color:white;padding:12px 16px;border-radius:8px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.error{background:#fff0ef;color:#a42c2c;padding:10px;border-radius:7px;margin-bottom:12px}
+.loading{opacity:.6;pointer-events:none}
+.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.role-box{margin-top:auto;padding-top:14px;border-top:1px solid #315b50}
+.role-box label{color:#b7d5c8;font-size:11px;display:block;margin-bottom:5px}
+.role-box select{background:#164a3d;color:white;border:1px solid #315b50;padding:7px;font-size:12px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:999}
+.modal{background:white;border-radius:12px;max-width:520px;width:100%;padding:20px;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.2)}
+@media(max-width:700px){
+  .layout{display:block}
+  .side{width:100%;padding:10px}
+  .brand{padding:5px 8px 10px;margin-bottom:7px}
+  .navs{display:flex;overflow:auto}
+  .nav{white-space:nowrap;width:auto}
+  .main{padding:14px}
+  .grid{grid-template-columns:1fr 1fr}
+  .cols,.cats{grid-template-columns:1fr}
+  .role-box{margin-top:10px;padding-top:10px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side">
+    <div class="brand">DUMPEDIA<small>PENGADUAN & KPI</small></div>
+    <div class="navs">
+      <button class="nav active" data-page="dashboard">▦ Dashboard</button>
+      <button class="nav" data-page="form">＋ Form Pengaduan</button>
+      <button class="nav" data-page="mine">▤ Pengaduan Saya</button>
+      <button class="nav" data-page="monitor">▣ Monitoring PIC</button>
+      <button class="nav" data-page="notifications">♧ Notifikasi</button>
+      <button class="nav" data-page="kpi">▥ Review & KPI</button>
+    </div>
+    <div class="role-box">
+      <label for="userSwitcher">👤 Akun / Peran Aktif:</label>
+      <select id="userSwitcher"></select>
+      <button class="btn alt sm" style="width:100%;margin-top:8px;background:#164a3d;color:#d8e9e1;border-color:#315b50" id="btnSettings">⚙️ Koneksi Database</button>
+      <div class="muted" style="color:#b7d5c8;margin-top:10px;font-size:11px">Sistem Pengaduan Internal</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <div>
+        <div class="crumb">
+          <span>DUMPEDIA / PENGADUAN</span>
+          <span id="modeBadge" class="badge-mode">Online</span>
+        </div>
+        <h2 id="title">Dashboard Pengaduan</h2>
+        <div id="who" class="muted">Memuat akun...</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn" id="quick">+ Pengaduan</button>
+      </div>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+
+    <section id="page-dashboard">
+      <div class="grid">
+        <div class="card"><div class="muted">Total Pengaduan</div><div class="stat" id="total">0</div></div>
+        <div class="card"><div class="muted">Belum Diproses</div><div class="stat" id="pending">0</div></div>
+        <div class="card"><div class="muted">Dalam Proses</div><div class="stat" id="progress">0</div></div>
+        <div class="card"><div class="muted">Selesai</div><div class="stat" id="done">0</div></div>
+      </div>
+      <div class="cols">
+        <div class="card">
+          <b>Pengaduan per kategori</b>
+          <p>Operasional: <b id="op">0</b></p>
+          <p>HC: <b id="hc">0</b></p>
+        </div>
+        <div class="card">
+          <b>Informasi akun</b>
+          <p id="account" class="muted"></p>
+        </div>
+      </div>
+      <div class="card">
+        <b>Pengaduan terbaru</b>
+        <div id="latest"></div>
+      </div>
+    </section>
+
+    <section id="page-form" class="hidden">
+      <div class="card">
+        <b>1. Pilih kategori pengaduan</b>
+        <div class="cats" style="margin-top:10px">
+          <button type="button" class="cat selected" data-cat="Operasional">
+            <div style="font-size:25px">🚗</div>
+            <b>Operasional</b>
+            <p class="muted">Perbaikan unit, kerusakan kendaraan, STNK, pajak dan dokumen mobil.</p>
+          </button>
+          <button type="button" class="cat" data-cat="HC">
+            <div style="font-size:25px">👥</div>
+            <b>HC</b>
+            <p class="muted">Absensi, payroll, cuti, BPJS dan administrasi karyawan.</p>
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <b id="formtitle">Form Pengaduan Operasional</b>
+        <form id="form">
+          <div class="field"><label>Nama pelapor *</label><input id="name" required></div>
+          <div class="field"><label>Departemen / lokasi *</label><input id="dept" required></div>
+          <div class="field"><label>Jenis pengaduan *</label><select id="type" required></select></div>
+          <div class="field" id="unitfield"><label>Nomor polisi / identitas unit</label><input id="unit" placeholder="B 1234 ABC"></div>
+          <div class="cols">
+            <div class="field">
+              <label>Prioritas</label>
+              <select id="priority">
+                <option>Rendah</option>
+                <option selected>Sedang</option>
+                <option>Tinggi</option>
+                <option>Urgent</option>
+              </select>
+            </div>
+            <div class="field"><label>Tanggal pengajuan</label><input type="date" id="date" required></div>
+          </div>
+          <div class="field"><label>Judul pengaduan *</label><input id="subject" required></div>
+          <div class="field"><label>Detail / kronologi *</label><textarea id="detail" required></textarea></div>
+          <div class="field"><label>Link bukti foto / dokumen (opsional)</label><input id="proof" placeholder="Link Google Drive atau dokumen"></div>
+          <button class="btn" type="submit">Kirim Pengaduan</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="page-mine" class="hidden">
+      <div class="card">
+        <b>Pengaduan Saya</b>
+        <div id="mine"></div>
+      </div>
+      <div id="thread" class="card hidden"></div>
+    </section>
+
+    <section id="page-monitor" class="hidden">
+      <div class="card">
+        <div class="cols">
+          <input id="query" placeholder="Cari ID, pelapor, judul, nomor unit">
+          <select id="filter">
+            <option value="">Semua status</option>
+            <option>Belum Diproses</option>
+            <option>Dalam Proses</option>
+            <option>Menunggu Konfirmasi Karyawan</option>
+            <option>Selesai</option>
+          </select>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Kategori</th><th>Pelapor</th><th>Pengaduan</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="picdetail" class="card hidden"></div>
+    </section>
+
+    <section id="page-notifications" class="hidden">
+      <div class="card">
+        <b>Notifikasi</b>
+        <div id="notes"></div>
+      </div>
+    </section>
+
+    <section id="page-kpi" class="hidden">
+      <div class="card">
+        <b>Rekap KPI Departemen</b>
+        <div id="kpis"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Modal Pengaturan Database Online -->
+<div id="settingsModal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h3 style="margin-top:0">⚙️ Koneksi Database Online</h3>
+    <p class="muted">
+      Aplikasi ini dapat berjalan langsung di <b>GitHub Pages</b> menggunakan penyimpanan browser (Mode Mandiri), atau dihubungkan ke <b>Google Sheets (Google Apps Script Web App)</b> agar data tersimpan terpusat untuk seluruh pengguna.
+    </p>
+    <div class="field">
+      <label>URL Google Apps Script Web App (Opsional)</label>
+      <input id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+      <span class="muted">Kosongkan jika ingin menggunakan Mode Mandiri (Local Storage).</span>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:16px">
+      <button type="button" class="btn alt" id="btnResetDemo">Reset Data Contoh</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn alt" id="btnCloseSettings">Tutup</button>
+        <button type="button" class="btn" id="btnSaveSettings">Simpan Koneksi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+// URL Web App Google Apps Script (terhubung ke Google Sheets):
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzLQCZe8SHftfoP5gwOFXHDMZutX7cTi1Tc3j71pp2tS_iaN-Y4RhkLNVlM7ljZq0aE/exec';
+
+const DEMO_USERS = [
+  { email: 'karyawan@dumpedia.com', name: 'Budi Santoso', dept: 'Operasional Lapangan', role: 'KARYAWAN' },
+  { email: 'pic.ops@dumpedia.com', name: 'Andi Wijaya (PIC Ops)', dept: 'Operasional', role: 'PIC' },
+  { email: 'pic.hc@dumpedia.com', name: 'Siti Rahma (PIC HC)', dept: 'Human Capital', role: 'PIC' },
+  { email: 'admin@dumpedia.com', name: 'Admin Dumpedia', dept: 'Management', role: 'ADMIN' },
+  { email: 'atasan@dumpedia.com', name: 'Hendra Kusuma', dept: 'Direksi', role: 'ATASAN' }
+];
+
+const STORAGE_KEY = 'dumpedia_pengaduan_db_v1';
+const USER_KEY = 'dumpedia_pengaduan_user_v1';
+const API_URL_KEY = 'dumpedia_pengaduan_api_url_v1';
+
+let state = { user: null, complaints: [], notifications: [], category: 'Operasional' };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const statusClass = s => s === 'Selesai' ? 'green' : s === 'Dalam Proses' ? 'blue' : s === 'Menunggu Konfirmasi Karyawan' ? 'amber' : 'red';
+
+function toast(s) {
+  $('toast').textContent = s;
+  $('toast').classList.remove('hidden');
+  setTimeout(() => $('toast').classList.add('hidden'), 3000);
+}
+function fail(e) {
+  $('error').textContent = (e && e.message) ? e.message : String(e);
+  $('error').classList.remove('hidden');
+}
+function clearError() {
+  $('error').classList.add('hidden');
+}
+
+function getApiUrl() {
+  return (localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL || '').trim();
+}
+
+function getCurrentDemoUser() {
+  const savedEmail = localStorage.getItem(USER_KEY);
+  return DEMO_USERS.find(u => u.email === savedEmail) || DEMO_USERS[0];
+}
+
+function initUserSwitcher() {
+  const current = getCurrentDemoUser();
+  $('userSwitcher').innerHTML = DEMO_USERS.map(u =>
+    `<option value="${esc(u.email)}" ${u.email === current.email ? 'selected' : ''}>${esc(u.name)} (${esc(u.role)})</option>`
+  ).join('');
+  $('userSwitcher').onchange = e => {
+    localStorage.setItem(USER_KEY, e.target.value);
+    $('thread').classList.add('hidden');
+    $('picdetail').classList.add('hidden');
+    refresh(() => toast('Beralih akun ke ' + getCurrentDemoUser().name));
+  };
+}
+
+function getInitialDb() {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    complaints: [
+      {
+        id: 'PGD-2611-101',
+        date: today,
+        category: 'Operasional',
+        type: 'Perbaikan kendaraan',
+        unit: 'B 9482 KQA',
+        priority: 'Tinggi',
+        name: 'Budi Santoso',
+        email: 'karyawan@dumpedia.com',
+        dept: 'Operasional Lapangan',
+        title: 'Rem hidrolik dump truck kurang pakem',
+        detail: 'Saat muatan penuh di area proyek, tekanan rem terasa dalam dan perlu pengecekan mekanik segera.',
+        proof: '',
+        status: 'Dalam Proses',
+        picName: 'Andi Wijaya (PIC Ops)',
+        result: 'Unit sedang dijadwalkan masuk workshop sore ini untuk penggantian seal master rem.',
+        completionProof: '',
+        rating: 0,
+        ratingComment: ''
+      },
+      {
+        id: 'PGD-2611-102',
+        date: today,
+        category: 'HC',
+        type: 'Kendala absensi',
+        unit: '-',
+        priority: 'Sedang',
+        name: 'Budi Santoso',
+        email: 'karyawan@dumpedia.com',
+        dept: 'Operasional Lapangan',
+        title: 'Koreksi absen shift malam tanggal 14',
+        detail: 'Mesin fingerprint di site sempat offline saat jam pulang shift malam.',
+        proof: '',
+        status: 'Menunggu Konfirmasi Karyawan',
+        picName: 'Siti Rahma (PIC HC)',
+        result: 'Data kehadiran tanggal 14 sudah dikoreksi di sistem HRIS sesuai log security site. Silakan konfirmasi.',
+        completionProof: '',
+        rating: 0,
+        ratingComment: ''
+      },
+      {
+        id: 'PGD-2611-103',
+        date: today,
+        category: 'Operasional',
+        type: 'Pajak / STNK / KIR',
+        unit: 'B 9011 TUX',
+        priority: 'Sedang',
+        name: 'Budi Santoso',
+        email: 'karyawan@dumpedia.com',
+        dept: 'Operasional Lapangan',
+        title: 'Perpanjangan bukuuji KIR berkala',
+        detail: 'Masa berlaku KIR habis minggu depan, mohon jadwal perpanjangan.',
+        proof: '',
+        status: 'Selesai',
+        picName: 'Andi Wijaya (PIC Ops)',
+        result: 'Uji KIR telah selesai diperpanjang dan kartu KIR terbaru sudah diserahkan ke koordinator lapangan.',
+        completionProof: 'https://drive.google.com',
+        rating: 5,
+        ratingComment: 'Proses sangat cepat, terima kasih.'
+      }
+    ],
+    messages: {
+      'PGD-2611-101': [
+        { by: 'Andi Wijaya (PIC Ops)', role: 'PIC', text: 'Laporan diterima, tim mekanik sudah menyiapkan suku cadang.', date: today + ' 09:30' }
+      ],
+      'PGD-2611-102': [
+        { by: 'Siti Rahma (PIC HC)', role: 'PIC', text: 'Absensi sudah kami update di sistem, silakan dicek dan klik Konfirmasi Selesai.', date: today + ' 10:15' }
+      ],
+      'PGD-2611-103': [
+        { by: 'Andi Wijaya (PIC Ops)', role: 'PIC', text: 'Dokumen KIR sudah selesai diperpanjang.', date: today + ' 08:00' },
+        { by: 'Budi Santoso', role: 'KARYAWAN', text: 'Siap, dokumen sudah diterima.', date: today + ' 08:45' }
+      ]
+    },
+    notifications: [
+      { ticket: 'PGD-2611-102', message: 'Status tiket PGD-2611-102 diperbarui menjadi "Menunggu Konfirmasi Karyawan".', date: today + ' 10:15' },
+      { ticket: 'PGD-2611-101', message: 'Andi Wijaya (PIC Ops) membalas tiket PGD-2611-101.', date: today + ' 09:30' },
+      { ticket: 'PGD-2611-103', message: 'Tiket PGD-2611-103 telah diselesaikan.', date: today + ' 08:45' }
+    ]
+  };
+}
+
+function loadDb() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  const init = getInitialDb();
+  saveDb(init);
+  return init;
+}
+
+function saveDb(db) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+}
+
+function nowStr() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10) + ' ' + d.toTimeString().slice(0, 5);
+}
+
+// Local Backend Handler (agar berfungsi penuh di GitHub Pages tanpa server)
+function localApi(name, arg) {
+  const db = loadDb();
+  const user = getCurrentDemoUser();
+
+  switch (name) {
+    case 'apiBootstrap':
+      return {
+        user: user,
+        complaints: db.complaints,
+        notifications: db.notifications
+      };
+
+    case 'apiCreateComplaint': {
+      const id = 'PGD-' + new Date().toISOString().slice(2, 7).replace('-', '') + '-' + Math.floor(100 + Math.random() * 900);
+      const picName = arg.category === 'HC' ? 'Siti Rahma (PIC HC)' : 'Andi Wijaya (PIC Ops)';
+      const item = {
+        id: id,
+        date: arg.date || new Date().toISOString().slice(0, 10),
+        category: arg.category || 'Operasional',
+        type: arg.type || '',
+        unit: arg.unit || '-',
+        priority: arg.priority || 'Sedang',
+        name: $('name').value || user.name,
+        email: user.email,
+        dept: $('dept').value || user.dept,
+        title: arg.title,
+        detail: arg.detail,
+        proof: arg.proof || '',
+        status: 'Belum Diproses',
+        picName: picName,
+        result: '',
+        completionProof: '',
+        rating: 0,
+        ratingComment: ''
+      };
+      db.complaints.push(item);
+      db.messages[id] = [];
+      db.notifications.unshift({
+        ticket: id,
+        message: `Pengaduan baru "${arg.title}" dibuat oleh ${item.name} dan diteruskan ke ${picName}.`,
+        date: nowStr()
+      });
+      saveDb(db);
+      return { id: id };
+    }
+
+    case 'apiGetThread': {
+      const c = db.complaints.find(x => x.id === arg);
+      if (!c) throw new Error('Tiket tidak ditemukan: ' + arg);
+      return {
+        complaint: c,
+        messages: db.messages[arg] || []
+      };
+    }
+
+    case 'apiSendMessage': {
+      if (!arg.message || !arg.message.trim()) throw new Error('Pesan tidak boleh kosong.');
+      if (!db.messages[arg.id]) db.messages[arg.id] = [];
+      db.messages[arg.id].push({
+        by: user.name,
+        role: user.role,
+        text: arg.message.trim(),
+        date: nowStr()
+      });
+      db.notifications.unshift({
+        ticket: arg.id,
+        message: `Pesan baru dari ${user.name} pada tiket ${arg.id}.`,
+        date: nowStr()
+      });
+      saveDb(db);
+      return { ok: true };
+    }
+
+    case 'apiConfirmComplaint': {
+      const c = db.complaints.find(x => x.id === arg.id);
+      if (!c) throw new Error('Tiket tidak ditemukan');
+      c.status = arg.confirmed ? 'Selesai' : 'Dalam Proses';
+      if (!db.messages[arg.id]) db.messages[arg.id] = [];
+      const msg = arg.confirmed
+        ? 'Pelapor mengonfirmasi pengaduan telah SELESAI.'
+        : 'Pelapor menyatakan kendala BELUM SELESAI, status kembali ke Dalam Proses.';
+      db.messages[arg.id].push({
+        by: user.name,
+        role: user.role,
+        text: msg,
+        date: nowStr()
+      });
+      db.notifications.unshift({
+        ticket: arg.id,
+        message: `${arg.id}: ${msg}`,
+        date: nowStr()
+      });
+      saveDb(db);
+      return { ok: true };
+    }
+
+    case 'apiRateComplaint': {
+      const c = db.complaints.find(x => x.id === arg.id);
+      if (!c) throw new Error('Tiket tidak ditemukan');
+      c.rating = Number(arg.rating || 5);
+      c.ratingComment = arg.comment || '';
+      db.notifications.unshift({
+        ticket: arg.id,
+        message: `Pelapor memberikan rating ${c.rating}/5 untuk tiket ${arg.id}.`,
+        date: nowStr()
+      });
+      saveDb(db);
+      return { ok: true };
+    }
+
+    case 'apiUpdateComplaint': {
+      const c = db.complaints.find(x => x.id === arg.id);
+      if (!c) throw new Error('Tiket tidak ditemukan');
+      c.status = arg.status;
+      c.result = arg.result || '';
+      c.completionProof = arg.proof || '';
+      if (arg.message && arg.message.trim()) {
+        if (!db.messages[arg.id]) db.messages[arg.id] = [];
+        db.messages[arg.id].push({
+          by: user.name,
+          role: user.role,
+          text: arg.message.trim(),
+          date: nowStr()
+        });
+      }
+      db.notifications.unshift({
+        ticket: arg.id,
+        message: `PIC (${user.name}) memperbarui status tiket ${arg.id} menjadi "${arg.status}".`,
+        date: nowStr()
+      });
+      saveDb(db);
+      return { ok: true };
+    }
+
+    case 'apiGetKpi': {
+      return ['Operasional', 'HC'].map(cat => {
+        const list = db.complaints.filter(x => x.category === cat);
+        const total = list.length;
+        const done = list.filter(x => x.status === 'Selesai').length;
+        const open = total - done;
+        const completion = total ? Math.round((done / total) * 100) : 0;
+        const rated = list.filter(x => Number(x.rating) > 0);
+        const avg = rated.length ? rated.reduce((s, x) => s + Number(x.rating), 0) / rated.length : 0;
+        return {
+          category: cat,
+          total: total,
+          done: done,
+          open: open,
+          completion: completion,
+          averageRating: avg
+        };
+      });
+    }
+
+    default:
+      throw new Error('Fungsi tidak dikenal: ' + name);
+  }
+}
+
+function updateModeBadge() {
+  const isGas = typeof window.google !== 'undefined' && window.google.script && window.google.script.run;
+  const apiUrl = getApiUrl();
+  if (isGas) {
+    $('modeBadge').textContent = 'Google Apps Script';
+  } else if (apiUrl) {
+    $('modeBadge').textContent = 'Cloud API (Google Sheets)';
+  } else {
+    $('modeBadge').textContent = 'Mode Mandiri (GitHub Pages)';
+  }
+}
+
+function call(name, arg, done) {
+  clearError();
+  updateModeBadge();
+
+  // 1. Jika dijalankan di dalam iframe Google Apps Script
+  if (typeof window.google !== 'undefined' && window.google.script && window.google.script.run) {
+    window.google.script.run.withSuccessHandler(done).withFailureHandler(fail)[name](arg);
+    return;
+  }
+
+  // 2. Jika URL Web App Google Apps Script dikonfigurasi (Cloud API via fetch)
+  const apiUrl = getApiUrl();
+  if (apiUrl) {
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: name, arg: arg, user: getCurrentDemoUser() })
+    })
+      .then(async r => {
+        const text = await r.text();
+        let res;
+        try {
+          res = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error('FALLBACK_LOCAL');
+        }
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Gagal memproses permintaan ke server.');
+        $('modeBadge').textContent = 'Terhubung ke Google Sheets';
+        if (done) done(res.data);
+      })
+      .catch(err => {
+        // Jika Apps Script belum memiliki fungsi doPost JSON, otomatis jalankan Mode Mandiri agar aplikasi tetap lancar
+        if (err && (err.message === 'FALLBACK_LOCAL' || err.name === 'TypeError')) {
+          $('modeBadge').textContent = 'Online (Mode Mandiri)';
+          try {
+            const result = localApi(name, arg);
+            if (done) done(result);
+          } catch (localErr) {
+            fail(localErr);
+          }
+          return;
+        }
+        fail(err);
+      });
+    return;
+  }
+
+  // 3. Mode Mandiri (GitHub Pages / Browser LocalStorage)
+  try {
+    const result = localApi(name, arg);
+    if (done) setTimeout(() => done(result), 40);
+  } catch (err) {
+    fail(err);
+  }
+}
+
+function go(p) {
+  document.querySelectorAll('main section').forEach(x => x.classList.add('hidden'));
+  $('page-' + p).classList.remove('hidden');
+  document.querySelectorAll('.nav').forEach(x => x.classList.toggle('active', x.dataset.page === p));
+  $('title').textContent = ({
+    dashboard: 'Dashboard Pengaduan',
+    form: 'Form Pengaduan',
+    mine: 'Pengaduan Saya',
+    monitor: 'Monitoring PIC',
+    notifications: 'Notifikasi',
+    kpi: 'Review & KPI'
+  })[p];
+  if (p === 'kpi') loadKpi();
+  render();
+}
+
+function refresh(cb) {
+  call('apiBootstrap', null, d => {
+    state = d;
+    const u = d.user;
+    $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
+    $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
+    $('name').value = u.name;
+    $('dept').value = u.dept;
+    document.querySelector('[data-page="monitor"]').classList.toggle('hidden', !['PIC', 'ADMIN', 'ATASAN'].includes(u.role));
+    document.querySelector('[data-page="kpi"]').classList.toggle('hidden', !['ADMIN', 'ATASAN'].includes(u.role));
+    $('quick').classList.toggle('hidden', u.role === 'PIC');
+    render();
+    if (cb) cb();
+  });
+}
+
+function render() {
+  let a = state.complaints || [];
+  $('total').textContent = a.length;
+  $('pending').textContent = a.filter(x => x.status === 'Belum Diproses').length;
+  $('progress').textContent = a.filter(x => x.status === 'Dalam Proses' || x.status === 'Menunggu Konfirmasi Karyawan').length;
+  $('done').textContent = a.filter(x => x.status === 'Selesai').length;
+  $('op').textContent = a.filter(x => x.category === 'Operasional').length;
+  $('hc').textContent = a.filter(x => x.category === 'HC').length;
+
+  $('latest').innerHTML = a.slice().reverse().slice(0, 5).map(x =>
+    `<div class="notice"><b>${esc(x.id)} · ${esc(x.title)}</b> — ${esc(x.category)} · <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></div>`
+  ).join('') || '<p class="muted">Belum ada pengaduan.</p>';
+
+  const myComplaints = state.user ? a.filter(x => x.email === state.user.email || state.user.role === 'ADMIN') : [];
+  $('mine').innerHTML = myComplaints.slice().reverse().map(x =>
+    `<div class="notice"><b>${esc(x.id)} · ${esc(x.title)}</b><p class="muted">${esc(x.category)} · ${esc(x.date)} · PIC: ${esc(x.picName)}</p><span class="pill ${statusClass(x.status)}">${esc(x.status)}</span> <button class="btn alt sm" onclick="openThread('${esc(x.id)}')">Lihat jawaban</button></div>`
+  ).join('') || '<p class="muted">Belum ada pengaduan.</p>';
+
+  let q = ($('query').value || '').toLowerCase(), f = $('filter').value;
+  $('rows').innerHTML = a.filter(x => (!f || x.status === f) && [x.id, x.name, x.title, x.unit].join(' ').toLowerCase().includes(q)).slice().reverse().map(x =>
+    `<tr><td>${esc(x.id)}</td><td>${esc(x.category)}</td><td>${esc(x.name)}</td><td>${esc(x.title)}<br><span class="muted">${esc(x.unit)}</span></td><td><span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></td><td><button class="btn alt sm" onclick="openPic('${esc(x.id)}')">Detail</button></td></tr>`
+  ).join('');
+
+  $('notes').innerHTML = (state.notifications || []).map(n =>
+    `<div class="notice"><b>${esc(n.ticket)}</b><p>${esc(n.message)}</p><span class="muted">${esc(n.date)}</span></div>`
+  ).join('') || '<p class="muted">Belum ada notifikasi.</p>';
+}
+
+function setCategory(c) {
+  state.category = c;
+  $('formtitle').textContent = 'Form Pengaduan ' + c;
+  $('unitfield').classList.toggle('hidden', c === 'HC');
+  document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('selected', x.dataset.cat === c));
+  $('type').innerHTML = (c === 'HC'
+    ? ['Kendala absensi', 'Payroll', 'Cuti dan izin', 'BPJS', 'Administrasi karyawan', 'Kendala lainnya']
+    : ['Perbaikan kendaraan', 'Kerusakan unit', 'Dokumen kendaraan', 'Pajak / STNK / KIR', 'Kendala lainnya']
+  ).map(x => `<option>${x}</option>`).join('');
+}
+
+document.querySelectorAll('.nav').forEach(b => b.onclick = () => go(b.dataset.page));
+document.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => setCategory(b.dataset.cat));
+$('quick').onclick = () => go('form');
+$('date').value = new Date().toISOString().slice(0, 10);
+setCategory('Operasional');
+initUserSwitcher();
+
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const d = {
+    category: state.category,
+    date: $('date').value,
+    type: $('type').value,
+    unit: $('unit').value,
+    priority: $('priority').value,
+    title: $('subject').value,
+    detail: $('detail').value,
+    proof: $('proof').value
+  };
+  call('apiCreateComplaint', d, r => {
+    toast('Pengaduan terkirim. Nomor tiket: ' + r.id);
+    $('form').reset();
+    $('date').value = new Date().toISOString().slice(0, 10);
+    refresh(() => go('mine'));
+  });
+};
+
+window.openThread = id => call('apiGetThread', id, d => {
+  let x = d.complaint;
+  $('thread').classList.remove('hidden');
+  $('thread').innerHTML = `
+    <b>${esc(x.id)} · ${esc(x.title)}</b>
+    <p>Status: <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></p>
+    <div class="notice"><b>Hasil Penyelesaian:</b><br>${esc(x.result || 'Belum ada hasil penyelesaian.')}${x.completionProof ? `<br><a href="${esc(x.completionProof)}" target="_blank" rel="noopener">Lihat Bukti Penyelesaian</a>` : ''}</div>
+    ${d.messages.map(m => `<div class="bubble ${state.user && m.by === state.user.name ? 'mine' : ''}"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('')}
+    <div class="field"><textarea id="replymsg" placeholder="Balas pesan PIC..."></textarea></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="sendMessage('${esc(id)}')">Kirim pesan</button>
+      ${x.status === 'Menunggu Konfirmasi Karyawan' ? `<button class="btn" onclick="confirmResult('${esc(id)}',true)">✓ Konfirmasi selesai</button><button class="btn alt" onclick="confirmResult('${esc(id)}',false)">✗ Belum selesai</button>` : ''}
+    </div>
+    ${x.status === 'Selesai' ? `
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+        <label>Berikan Penilaian Penyelesaian</label>
+        <div class="cols" style="margin:8px 0">
+          <select id="rating">
+            <option value="5" ${Number(x.rating) === 5 ? 'selected' : ''}>5 - Sangat puas</option>
+            <option value="4" ${Number(x.rating) === 4 ? 'selected' : ''}>4 - Puas</option>
+            <option value="3" ${Number(x.rating) === 3 ? 'selected' : ''}>3 - Cukup</option>
+            <option value="2" ${Number(x.rating) === 2 ? 'selected' : ''}>2 - Kurang</option>
+            <option value="1" ${Number(x.rating) === 1 ? 'selected' : ''}>1 - Tidak puas</option>
+          </select>
+          <input id="ratingcomment" placeholder="Komentar penilaian" value="${esc(x.ratingComment || '')}">
+        </div>
+        <button class="btn" onclick="rateResult('${esc(id)}')">Kirim rating</button>
+      </div>` : ''}
+  `;
+});
+
+window.sendMessage = id => call('apiSendMessage', { id, message: $('replymsg').value }, () => {
+  toast('Pesan terkirim');
+  refresh(() => openThread(id));
+});
+
+window.confirmResult = (id, confirmed) => call('apiConfirmComplaint', { id, confirmed }, () => {
+  toast('Konfirmasi tersimpan');
+  refresh(() => openThread(id));
+});
+
+window.rateResult = id => call('apiRateComplaint', { id, rating: $('rating').value, comment: $('ratingcomment').value }, () => {
+  toast('Rating tersimpan');
+  refresh(() => openThread(id));
+});
+
+window.openPic = id => call('apiGetThread', id, d => {
+  let x = d.complaint;
+  $('picdetail').classList.remove('hidden');
+  $('picdetail').innerHTML = `
+    <b>${esc(x.id)} · ${esc(x.title)}</b>
+    <p class="muted">Pelapor: ${esc(x.name)} (${esc(x.dept)}) · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
+    <div class="notice">${esc(x.detail)}${x.proof ? `<br><br><a href="${esc(x.proof)}" target="_blank" rel="noopener">📎 Lihat Bukti Pelapor</a>` : ''}</div>
+    <div class="field"><label>Status</label><select id="picstatus">${['Belum Diproses', 'Dalam Proses', 'Menunggu Konfirmasi Karyawan', 'Selesai'].map(s => `<option ${s === x.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+    <div class="field"><label>Hasil penyelesaian / jawaban untuk karyawan</label><textarea id="picresult">${esc(x.result || '')}</textarea></div>
+    <div class="field"><label>Link bukti penyelesaian</label><input id="picproof" value="${esc(x.completionProof || '')}"></div>
+    <div class="field"><label>Pesan kepada pelapor</label><textarea id="picmessage" placeholder="Tuliskan perkembangan atau hasil pekerjaan..."></textarea></div>
+    <button class="btn" onclick="savePic('${esc(id)}')">Simpan & kirim jawaban</button>
+    <h4>Riwayat percakapan</h4>
+    ${d.messages.map(m => `<div class="bubble"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('') || '<p class="muted">Belum ada percakapan.</p>'}
+  `;
+});
+
+window.savePic = id => call('apiUpdateComplaint', {
+  id,
+  status: $('picstatus').value,
+  result: $('picresult').value,
+  proof: $('picproof').value,
+  message: $('picmessage').value
+}, () => {
+  toast('Jawaban dikirim kepada pelapor');
+  refresh(() => openPic(id));
+});
+
+function loadKpi() {
+  call('apiGetKpi', null, a => {
+    $('kpis').innerHTML = a.map(x => `
+      <div class="notice">
+        <b>${esc(x.category)}</b>
+        <p>Total: ${x.total} · Selesai: ${x.done} · Belum selesai: ${x.open}</p>
+        <b>Penyelesaian: ${x.completion}%</b>
+        <p>Rata-rata rating: ${Number(x.averageRating).toFixed(1)} / 5</p>
+      </div>
+    `).join('');
+  });
+}
+
+// Modal Pengaturan
+$('btnSettings').onclick = () => {
+  $('apiUrlInput').value = getApiUrl();
+  $('settingsModal').classList.remove('hidden');
+};
+$('btnCloseSettings').onclick = () => $('settingsModal').classList.add('hidden');
+$('btnSaveSettings').onclick = () => {
+  const val = $('apiUrlInput').value.trim();
+  if (val) {
+    localStorage.setItem(API_URL_KEY, val);
+    toast('Terhubung ke Cloud API');
+  } else {
+    localStorage.removeItem(API_URL_KEY);
+    toast('Menggunakan Mode Mandiri (Browser)');
+  }
+  $('settingsModal').classList.add('hidden');
+  refresh();
+};
+$('btnResetDemo').onclick = () => {
+  localStorage.removeItem(STORAGE_KEY);
+  $('settingsModal').classList.add('hidden');
+  refresh(() => toast('Data contoh berhasil di-reset'));
+};
+
+$('query').oninput = render;
+$('filter').onchange = render;
+refresh();
+</script>
+</body>
+</html>
