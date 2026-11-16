@@ -152,8 +152,9 @@ th{color:var(--muted)}
       <div class="card">
         <b id="formtitle">Form Pengaduan Operasional</b>
         <form id="form">
-          <div class="field"><label>Nama pelapor *</label><input id="name" required></div>
-          <div class="field"><label>Departemen / lokasi *</label><input id="dept" required></div>
+          <div class="field"><label>Cabang *</label><select id="cabang" required></select></div>
+          <div class="field"><label>Nama karyawan *</label><select id="name" required></select></div>
+          <div class="field"><label>Employee Id</label><input id="employeeId" readonly placeholder="Terisi otomatis dari data karyawan"></div>
           <div class="field"><label>Jenis pengaduan *</label><select id="type" required></select></div>
           <div class="field" id="unitfield"><label>Nomor polisi / identitas unit</label><input id="unit" placeholder="B 1234 ABC"></div>
           <div class="cols">
@@ -431,9 +432,11 @@ function localApi(name, arg) {
         type: arg.type || '',
         unit: arg.unit || '-',
         priority: arg.priority || 'Sedang',
-        name: $('name').value || user.name,
+        name: arg.name || user.name,
+        employeeId: arg.employeeId || '',
+        cabang: arg.cabang || '',
         email: user.email,
-        dept: $('dept').value || user.dept,
+        dept: arg.cabang || user.dept,
         title: arg.title,
         detail: arg.detail,
         proof: arg.proof || '',
@@ -658,8 +661,7 @@ function refresh(cb) {
     const u = d.user;
     $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
     $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
-    $('name').value = u.name;
-    $('dept').value = u.dept;
+    initEmployeeForm(d.employees && d.employees.length ? d.employees : SAMPLE_EMPLOYEES);
     // Semua menu navigasi (termasuk Monitoring PIC dan Review & KPI) selalu ditampilkan agar tidak hilang
     document.querySelector('[data-page="monitor"]').classList.remove('hidden');
     document.querySelector('[data-page="kpi"]').classList.remove('hidden');
@@ -717,6 +719,33 @@ function render() {
   `).join('');
 }
 
+const SAMPLE_EMPLOYEES = [
+  { cabang: 'AAM Bandung', employeeId: '60912-010', name: 'Budi Hermawan' },
+  { cabang: 'AAM Bandung', employeeId: '60801-006', name: 'Fauzi F' },
+  { cabang: 'AAM Bekasi', employeeId: '012311-0389', name: 'Ahmad Fahri' }
+];
+let employees = [];
+
+function initEmployeeForm(list) {
+  employees = list || [];
+  const prevCabang = $('cabang').value;
+  const cabangs = [...new Set(employees.map(e => e.cabang).filter(Boolean))].sort();
+  $('cabang').innerHTML = '<option value="">-- Pilih cabang --</option>' + cabangs.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (cabangs.includes(prevCabang)) $('cabang').value = prevCabang;
+  fillNames();
+}
+
+function fillNames() {
+  const cab = $('cabang').value;
+  const list = employees.filter(e => e.cabang === cab).sort((a, b) => a.name.localeCompare(b.name));
+  $('name').innerHTML = '<option value="">' + (cab ? '-- Pilih nama karyawan --' : '-- Pilih cabang dulu --') + '</option>' +
+    list.map(e => `<option value="${esc(e.employeeId)}">${esc(e.name)}</option>`).join('');
+  $('employeeId').value = '';
+}
+
+$('cabang').onchange = fillNames;
+$('name').onchange = () => { $('employeeId').value = $('name').value; };
+
 function setCategory(c) {
   state.category = c;
   $('formtitle').textContent = 'Form Pengaduan ' + c;
@@ -739,6 +768,9 @@ $('form').onsubmit = e => {
   e.preventDefault();
   const d = {
     category: state.category,
+    cabang: $('cabang').value,
+    employeeId: $('employeeId').value,
+    name: $('name').selectedOptions[0] ? $('name').selectedOptions[0].textContent : '',
     date: $('date').value,
     type: $('type').value,
     unit: $('unit').value,
@@ -750,6 +782,7 @@ $('form').onsubmit = e => {
   call('apiCreateComplaint', d, r => {
     toast('Pengaduan terkirim. Nomor tiket: ' + r.id);
     $('form').reset();
+    fillNames();
     $('date').value = new Date().toISOString().slice(0, 10);
     refresh(() => go('mine'));
   });
@@ -806,7 +839,7 @@ window.openPic = id => call('apiGetThread', id, d => {
   $('picdetail').classList.remove('hidden');
   $('picdetail').innerHTML = `
     <b>${esc(x.id)} · ${esc(x.title)}</b>
-    <p class="muted">Pelapor: ${esc(x.name)} (${esc(x.dept)}) · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
+    <p class="muted">Pelapor: ${esc(x.name)} · ID: ${esc(x.employeeId || '-')} · Cabang: ${esc(x.cabang || x.dept)} · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
     <div class="notice">${esc(x.detail)}${x.proof ? `<br><br><a href="${esc(x.proof)}" target="_blank" rel="noopener">📎 Lihat Bukti Pelapor</a>` : ''}</div>
     <div class="field"><label>Status</label><select id="picstatus">${['Belum Diproses', 'Dalam Proses', 'Menunggu Konfirmasi Karyawan', 'Selesai'].map(s => `<option ${s === x.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     <div class="field"><label>Hasil penyelesaian / jawaban untuk karyawan</label><textarea id="picresult">${esc(x.result || '')}</textarea></div>
