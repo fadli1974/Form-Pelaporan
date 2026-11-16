@@ -255,14 +255,16 @@ const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzLQCZe8SHftfoP
 
 const DEMO_USERS = [
   { email: 'karyawan@dumpedia.com', name: 'Budi Santoso', dept: 'Operasional Lapangan', role: 'KARYAWAN' },
-  { email: 'pic.ops@dumpedia.com', name: 'Andi Wijaya (PIC Ops)', dept: 'Operasional', role: 'PIC' },
-  { email: 'pic.hc@dumpedia.com', name: 'Siti Rahma (PIC HC)', dept: 'Human Capital', role: 'PIC' },
+  { email: 'pic.ops@dumpedia.com', name: 'Andi Wijaya (PIC Ops)', dept: 'Operasional', role: 'OPS' },
+  { email: 'pic.hc@dumpedia.com', name: 'Siti Rahma (PIC HC)', dept: 'Human Capital', role: 'HC' },
   { email: 'admin@dumpedia.com', name: 'Admin Dumpedia', dept: 'Management', role: 'ADMIN' },
   { email: 'atasan@dumpedia.com', name: 'Hendra Kusuma', dept: 'Direksi', role: 'ATASAN' }
 ];
+let knownUsers = [];
 
 const STORAGE_KEY = 'dumpedia_pengaduan_db_v1';
 const USER_KEY = 'dumpedia_pengaduan_user_v1';
+const PIN_KEY = 'dumpedia_pengaduan_pin_v1';
 const API_URL_KEY = 'dumpedia_pengaduan_api_url_v1';
 
 let state = { user: null, complaints: [], notifications: [], category: 'Operasional' };
@@ -276,8 +278,10 @@ function toast(s) {
   setTimeout(() => $('toast').classList.add('hidden'), 3000);
 }
 function fail(e) {
-  $('error').textContent = (e && e.message) ? e.message : String(e);
+  const msg = (e && e.message) ? e.message : String(e);
+  $('error').textContent = msg;
   $('error').classList.remove('hidden');
+  if (/PIN/.test(msg)) { resetToGuest(); refresh(); }
 }
 function clearError() {
   $('error').classList.add('hidden');
@@ -289,20 +293,51 @@ function getApiUrl() {
 
 function getCurrentDemoUser() {
   const savedEmail = localStorage.getItem(USER_KEY);
-  return DEMO_USERS.find(u => u.email === savedEmail) || DEMO_USERS[0];
+  const list = knownUsers.length ? knownUsers : DEMO_USERS;
+  const u = list.find(x => x.email === savedEmail) || DEMO_USERS[0];
+  return { ...u, pin: sessionStorage.getItem(PIN_KEY) || '' };
+}
+
+function resetToGuest() {
+  localStorage.setItem(USER_KEY, DEMO_USERS[0].email);
+  sessionStorage.removeItem(PIN_KEY);
+  initUserSwitcher();
 }
 
 function initUserSwitcher() {
   const current = getCurrentDemoUser();
-  $('userSwitcher').innerHTML = DEMO_USERS.map(u =>
-    `<option value="${esc(u.email)}" ${u.email === current.email ? 'selected' : ''}>${esc(u.name)} (${esc(u.role)})</option>`
+  const list = knownUsers.length ? knownUsers : DEMO_USERS;
+  const label = u => u.role === 'KARYAWAN' ? 'Karyawan (Umum)' : `${u.name} (${u.role})`;
+  $('userSwitcher').innerHTML = list.map(u =>
+    `<option value="${esc(u.email)}" ${u.email === current.email ? 'selected' : ''}>${esc(label(u))}</option>`
   ).join('');
   $('userSwitcher').onchange = e => {
-    localStorage.setItem(USER_KEY, e.target.value);
+    const target = list.find(u => u.email === e.target.value) || DEMO_USERS[0];
+    let pin = '';
+    if (target.role !== 'KARYAWAN') {
+      pin = prompt('Masukkan PIN untuk ' + target.name + ' (' + target.role + '):');
+      if (pin === null) { initUserSwitcher(); return; }
+    }
+    localStorage.setItem(USER_KEY, target.email);
+    sessionStorage.setItem(PIN_KEY, pin);
     $('thread').classList.add('hidden');
     $('picdetail').classList.add('hidden');
-    refresh(() => toast('Beralih akun ke ' + getCurrentDemoUser().name));
+    go('dashboard');
+    refresh(() => toast('Masuk sebagai ' + getCurrentDemoUser().name));
   };
+}
+
+// Hak akses kategori per role
+function allowedCategories(role) {
+  if (role === 'OPS') return ['Operasional'];
+  if (role === 'HC') return ['HC'];
+  return ['Operasional', 'HC'];
+}
+function isStaff(role) { return ['OPS', 'HC', 'ADMIN', 'ATASAN'].includes(role); }
+function canSeeComplaint(u, c) {
+  if (!allowedCategories(u.role).includes(c.category)) return false;
+  if (u.role === 'KARYAWAN') return c.email === u.email;
+  return true;
 }
 
 function getInitialDb() {
@@ -651,21 +686,31 @@ function go(p) {
     notifications: 'Notifikasi',
     kpi: 'Review & KPI'
   })[p];
-  if (p === 'kpi') loadKpi();
+  if (p === 'monitor' && !(state.user && isStaff(state.user.role))) return go('dashboard');
   render();
 }
 
 function refresh(cb) {
   call('apiBootstrap', null, d => {
-    state = d;
     const u = d.user;
+    // Filter tampilan sesuai role: OPS = Operasional, HC = HC, ADMIN/ATASAN = semua
+    d.complaints = (d.complaints || []).filter(c => canSeeComplaint(u, c));
+    const ids = new Set(d.complaints.map(c => String(c.id)));
+    d.notifications = (d.notifications || []).filter(n => ids.has(String(n.ticket)));
+    state = d;
+    if (d.users && d.users.length) {
+      knownUsers = d.users;
+      initUserSwitcher();
+    }
     $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
     $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
     initEmployeeForm(d.employees && d.employees.length ? d.employees : SAMPLE_EMPLOYEES);
-    // Semua menu navigasi (termasuk Monitoring PIC dan Review & KPI) selalu ditampilkan agar tidak hilang
-    document.querySelector('[data-page="monitor"]').classList.remove('hidden');
+    // Monitoring PIC hanya untuk staff (OPS, HC, ADMIN, ATASAN); menu lain tampil untuk semua
+    const staff = isStaff(u.role);
+    document.querySelector('[data-page="monitor"]').classList.toggle('hidden', !staff);
     document.querySelector('[data-page="kpi"]').classList.remove('hidden');
     $('quick').classList.remove('hidden');
+    if (!staff && !$('page-monitor').classList.contains('hidden')) go('dashboard');
     render();
     if (cb) cb();
   });
@@ -699,7 +744,7 @@ function render() {
   ).join('') || '<p class="muted">Belum ada notifikasi.</p>';
 
   // Render Review & KPI secara langsung dari data pengaduan agar selalu muncul & tidak pernah kosong
-  const kpiData = ['Operasional', 'HC'].map(cat => {
+  const kpiData = allowedCategories(state.user ? state.user.role : 'KARYAWAN').map(cat => {
     const list = a.filter(x => x.category === cat);
     const total = list.length;
     const done = list.filter(x => x.status === 'Selesai').length;
@@ -862,7 +907,8 @@ window.savePic = id => call('apiUpdateComplaint', {
   refresh(() => openPic(id));
 });
 
-function loadKpi() {
+function loadKpi() { render(); }
+function loadKpiOld() {
   call('apiGetKpi', null, a => {
     $('kpis').innerHTML = a.map(x => `
       <div class="notice">
