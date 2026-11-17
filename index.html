@@ -806,6 +806,21 @@ function setCategory(c) {
   ).map(x => `<option>${x}</option>`).join('');
 }
 
+// Format otomatis nomor polisi: huruf besar + spasi (contoh: B 1234 ABC)
+function formatPlate(v) {
+  const raw = String(v).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const m = raw.match(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/) || raw.match(/^([A-Z]{1,2})(\d{0,4})$/);
+  if (!m) return String(v).toUpperCase(); // bukan pola plat, biarkan huruf besar saja (identitas unit lain)
+  return [m[1], m[2], m[3]].filter(Boolean).join(' ') + (/\s$/.test(v) && m[1] && !m[2] ? ' ' : '');
+}
+$('unit').addEventListener('input', e => {
+  const el = e.target;
+  const formatted = formatPlate(el.value);
+  if (formatted !== el.value) el.value = formatted;
+});
+$('unit').addEventListener('blur', e => { e.target.value = formatPlate(e.target.value).trim(); });
+$('unit').style.textTransform = 'uppercase';
+
 document.querySelectorAll('.nav').forEach(b => b.onclick = () => go(b.dataset.page));
 document.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => setCategory(b.dataset.cat));
 $('quick').onclick = () => go('form');
