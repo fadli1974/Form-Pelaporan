@@ -623,19 +623,30 @@ function updateModeBadge() {
   }
 }
 
+let pendingCalls = 0;
+function setBusy(on) {
+  pendingCalls = Math.max(0, pendingCalls + (on ? 1 : -1));
+  const main = document.querySelector('main');
+  if (main) main.classList.toggle('loading', pendingCalls > 0);
+}
+
 function call(name, arg, done) {
   clearError();
   updateModeBadge();
 
   // 1. Jika dijalankan di dalam iframe Google Apps Script
   if (typeof window.google !== 'undefined' && window.google.script && window.google.script.run) {
-    window.google.script.run.withSuccessHandler(done).withFailureHandler(fail)[name](arg);
+    setBusy(true);
+    window.google.script.run
+      .withSuccessHandler(res => { setBusy(false); if (done) done(res); })
+      .withFailureHandler(err => { setBusy(false); fail(err); })[name](arg);
     return;
   }
 
   // 2. Jika URL Web App Google Apps Script dikonfigurasi (Cloud API via fetch)
   const apiUrl = getApiUrl();
   if (apiUrl) {
+    setBusy(true);
     fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -651,9 +662,11 @@ function call(name, arg, done) {
         }
         if (!res || !res.ok) throw new Error((res && res.error) || 'Gagal memproses permintaan ke server.');
         $('modeBadge').textContent = 'Terhubung ke Google Sheets';
+        setBusy(false);
         if (done) done(res.data);
       })
       .catch(err => {
+        setBusy(false);
         // Jika Apps Script belum memiliki fungsi doPost JSON, otomatis jalankan Mode Mandiri agar aplikasi tetap lancar
         if (err && (err.message === 'FALLBACK_LOCAL' || err.name === 'TypeError')) {
           $('modeBadge').textContent = 'Online (Mode Mandiri)';
@@ -696,7 +709,8 @@ function go(p) {
 }
 
 function refresh(cb) {
-  call('apiBootstrap', null, d => {
+  const hasEmployees = employees.length > 0 && employees !== SAMPLE_EMPLOYEES;
+  call('apiBootstrap', hasEmployees ? { skipEmployees: true } : null, d => {
     const u = d.user;
     // Filter tampilan sesuai role: OPS = Operasional, HC = HC, ADMIN/ATASAN = semua
     d.complaints = (d.complaints || []).filter(c => canSeeComplaint(u, c));
@@ -709,7 +723,14 @@ function refresh(cb) {
     }
     $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
     $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
-    initEmployeeForm(d.employees && d.employees.length ? d.employees : SAMPLE_EMPLOYEES);
+    if (d.employees && d.employees.length) {
+      try { localStorage.setItem('dumpedia_employees_cache_v1', JSON.stringify(d.employees)); } catch (e) {}
+      initEmployeeForm(d.employees);
+    } else if (!hasEmployees) {
+      let cachedEmp = null;
+      try { cachedEmp = JSON.parse(localStorage.getItem('dumpedia_employees_cache_v1') || 'null'); } catch (e) {}
+      initEmployeeForm(cachedEmp && cachedEmp.length ? cachedEmp : SAMPLE_EMPLOYEES);
+    }
     // Monitoring PIC hanya untuk staff (OPS, HC, ADMIN, ATASAN); menu lain tampil untuk semua
     const staff = isStaff(String(u.role || "").trim().toUpperCase()) || isStaff(String(getCurrentDemoUser().role || "").trim().toUpperCase());
     document.querySelector('[data-page="monitor"]').classList.toggle('hidden', !staff);
@@ -831,6 +852,26 @@ localStorage.setItem(USER_KEY, DEMO_USERS[0].email);
 sessionStorage.removeItem(PIN_KEY);
 initUserSwitcher();
 
+let currentThread = { id: null, messages: [] };
+
+function applyLocalUpdate(res, fallbackId) {
+  if (!res) return;
+  if (res.complaint) {
+    const idx = (state.complaints || []).findIndex(c => String(c.id) === String(res.complaint.id));
+    if (idx !== -1) state.complaints[idx] = res.complaint;
+    else state.complaints.push(res.complaint);
+  }
+  if (res.message) {
+    if (String(currentThread.id) === String(res.message.ticketId || fallbackId)) {
+      currentThread.messages.push(res.message);
+    }
+  }
+  if (res.notification) {
+    state.notifications = [res.notification, ...(state.notifications || [])];
+  }
+  render();
+}
+
 $('form').onsubmit = e => {
   e.preventDefault();
   const d = {
@@ -851,22 +892,26 @@ $('form').onsubmit = e => {
     $('form').reset();
     fillNames();
     $('date').value = new Date().toISOString().slice(0, 10);
-    refresh(() => go('mine'));
+    if (r.complaint || r.notification) {
+      applyLocalUpdate(r, r.id);
+      go('mine');
+    } else {
+      refresh(() => go('mine'));
+    }
   });
 };
 
-window.openThread = id => call('apiGetThread', id, d => {
-  let x = d.complaint;
+function renderThreadView(x, messages) {
   $('thread').classList.remove('hidden');
   $('thread').innerHTML = `
     <b>${esc(x.id)} · ${esc(x.title)}</b>
     <p>Status: <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></p>
     <div class="notice"><b>Hasil Penyelesaian:</b><br>${esc(x.result || 'Belum ada hasil penyelesaian.')}${x.completionProof ? `<br><a href="${esc(x.completionProof)}" target="_blank" rel="noopener">Lihat Bukti Penyelesaian</a>` : ''}</div>
-    ${d.messages.map(m => `<div class="bubble ${state.user && m.by === state.user.name ? 'mine' : ''}"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('')}
+    ${messages.map(m => `<div class="bubble ${state.user && m.by === state.user.name ? 'mine' : ''}"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('')}
     <div class="field"><textarea id="replymsg" placeholder="Balas pesan PIC..."></textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="sendMessage('${esc(id)}')">Kirim pesan</button>
-      ${x.status === 'Menunggu Konfirmasi Karyawan' ? `<button class="btn" onclick="confirmResult('${esc(id)}',true)">✓ Konfirmasi selesai</button><button class="btn alt" onclick="confirmResult('${esc(id)}',false)">✗ Belum selesai</button>` : ''}
+      <button class="btn" onclick="sendMessage('${esc(x.id)}')">Kirim pesan</button>
+      ${x.status === 'Menunggu Konfirmasi Karyawan' ? `<button class="btn" onclick="confirmResult('${esc(x.id)}',true)">✓ Konfirmasi selesai</button><button class="btn alt" onclick="confirmResult('${esc(x.id)}',false)">✗ Belum selesai</button>` : ''}
     </div>
     ${x.status === 'Selesai' ? `
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
@@ -881,28 +926,48 @@ window.openThread = id => call('apiGetThread', id, d => {
           </select>
           <input id="ratingcomment" placeholder="Komentar penilaian" value="${esc(x.ratingComment || '')}">
         </div>
-        <button class="btn" onclick="rateResult('${esc(id)}')">Kirim rating</button>
+        <button class="btn" onclick="rateResult('${esc(x.id)}')">Kirim rating</button>
       </div>` : ''}
   `;
+}
+
+window.openThread = id => call('apiGetThread', id, d => {
+  currentThread = { id: id, messages: d.messages || [] };
+  renderThreadView(d.complaint, currentThread.messages);
 });
 
-window.sendMessage = id => call('apiSendMessage', { id, message: $('replymsg').value }, () => {
+window.sendMessage = id => call('apiSendMessage', { id, message: $('replymsg').value }, res => {
   toast('Pesan terkirim');
-  refresh(() => openThread(id));
+  if (res && res.message) {
+    applyLocalUpdate(res, id);
+    const c = (state.complaints || []).find(x => String(x.id) === String(id));
+    if (c) renderThreadView(c, currentThread.messages);
+  } else {
+    refresh(() => openThread(id));
+  }
 });
 
-window.confirmResult = (id, confirmed) => call('apiConfirmComplaint', { id, confirmed }, () => {
+window.confirmResult = (id, confirmed) => call('apiConfirmComplaint', { id, confirmed }, res => {
   toast('Konfirmasi tersimpan');
-  refresh(() => openThread(id));
+  if (res && res.complaint) {
+    applyLocalUpdate(res, id);
+    renderThreadView(res.complaint, currentThread.messages);
+  } else {
+    refresh(() => openThread(id));
+  }
 });
 
-window.rateResult = id => call('apiRateComplaint', { id, rating: $('rating').value, comment: $('ratingcomment').value }, () => {
+window.rateResult = id => call('apiRateComplaint', { id, rating: $('rating').value, comment: $('ratingcomment').value }, res => {
   toast('Rating tersimpan');
-  refresh(() => openThread(id));
+  if (res && res.complaint) {
+    applyLocalUpdate(res, id);
+    renderThreadView(res.complaint, currentThread.messages);
+  } else {
+    refresh(() => openThread(id));
+  }
 });
 
-window.openPic = id => call('apiGetThread', id, d => {
-  let x = d.complaint;
+function renderPicView(x, messages) {
   $('picdetail').classList.remove('hidden');
   $('picdetail').innerHTML = `
     <b>${esc(x.id)} · ${esc(x.title)}</b>
@@ -912,10 +977,15 @@ window.openPic = id => call('apiGetThread', id, d => {
     <div class="field"><label>Hasil penyelesaian / jawaban untuk karyawan</label><textarea id="picresult">${esc(x.result || '')}</textarea></div>
     <div class="field"><label>Link bukti penyelesaian</label><input id="picproof" value="${esc(x.completionProof || '')}"></div>
     <div class="field"><label>Pesan kepada pelapor</label><textarea id="picmessage" placeholder="Tuliskan perkembangan atau hasil pekerjaan..."></textarea></div>
-    <button class="btn" onclick="savePic('${esc(id)}')">Simpan & kirim jawaban</button>
+    <button class="btn" onclick="savePic('${esc(x.id)}')">Simpan & kirim jawaban</button>
     <h4>Riwayat percakapan</h4>
-    ${d.messages.map(m => `<div class="bubble"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('') || '<p class="muted">Belum ada percakapan.</p>'}
+    ${messages.map(m => `<div class="bubble"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('') || '<p class="muted">Belum ada percakapan.</p>'}
   `;
+}
+
+window.openPic = id => call('apiGetThread', id, d => {
+  currentThread = { id: id, messages: d.messages || [] };
+  renderPicView(d.complaint, currentThread.messages);
 });
 
 window.savePic = id => call('apiUpdateComplaint', {
@@ -924,9 +994,14 @@ window.savePic = id => call('apiUpdateComplaint', {
   result: $('picresult').value,
   proof: $('picproof').value,
   message: $('picmessage').value
-}, () => {
+}, res => {
   toast('Jawaban dikirim kepada pelapor');
-  refresh(() => openPic(id));
+  if (res && res.complaint) {
+    applyLocalUpdate(res, id);
+    renderPicView(res.complaint, currentThread.messages);
+  } else {
+    refresh(() => openPic(id));
+  }
 });
 
 function loadKpi() { render(); }
