@@ -4,7 +4,7 @@
 <base target="_top">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Layanan Pelaporan — Sistem Pengaduan & KPI</title>
+<title>Layanan Pelaporan — Sistem Pelaporan & KPI</title>
 <style>
 :root{--green:#0c3b30;--green2:#12634d;--line:#dce5e1;--muted:#687a73;--bg:#f5f8f6}
 *{box-sizing:border-box}
@@ -75,11 +75,11 @@ th{color:var(--muted)}
 <body>
 <div class="layout">
   <aside class="side">
-    <div class="brand">Layanan Pelaporan<small>SISTEM PENGADUAN & KPI</small></div>
+    <div class="brand">Layanan Pelaporan<small>SISTEM PELAPORAN & KPI</small></div>
     <div class="navs">
       <button class="nav active" data-page="dashboard">▦ Dashboard</button>
-      <button class="nav" data-page="form">＋ Form Pengaduan</button>
-      <button class="nav" data-page="mine">▤ Pengaduan Saya</button>
+      <button class="nav" data-page="form">＋ Form Pelaporan</button>
+      <button class="nav" data-page="mine">▤ Pelaporan Saya</button>
       <button class="nav hidden" data-page="monitor">▣ Monitoring PIC</button>
       <button class="nav" data-page="notifications">♧ Notifikasi</button>
       <button class="nav" data-page="kpi">▥ Review & KPI</button>
@@ -88,7 +88,7 @@ th{color:var(--muted)}
       <label for="userSwitcher">👤 Akun / Peran Aktif:</label>
       <select id="userSwitcher"></select>
       <button class="btn alt sm hidden" style="width:100%;margin-top:8px;background:#164a3d;color:#d8e9e1;border-color:#315b50" id="btnSettings">⚙️ Koneksi Database</button>
-      <div class="muted" style="color:#b7d5c8;margin-top:10px;font-size:11px">Sistem Pengaduan Internal</div>
+      <div class="muted" style="color:#b7d5c8;margin-top:10px;font-size:11px">Sistem Pelaporan Internal</div>
     </div>
   </aside>
 
@@ -99,11 +99,11 @@ th{color:var(--muted)}
           <span>Layanan Pelaporan</span>
           <span id="modeBadge" class="badge-mode">Online</span>
         </div>
-        <h2 id="title">Dashboard Pengaduan</h2>
+        <h2 id="title">Dashboard Pelaporan</h2>
         <div id="who" class="muted">Memuat akun...</div>
       </div>
       <div class="top-actions">
-        <button class="btn hidden" id="quick">+ Pengaduan</button>
+        <button class="btn hidden" id="quick">+ Pelaporan</button>
       </div>
     </div>
 
@@ -111,14 +111,14 @@ th{color:var(--muted)}
 
     <section id="page-dashboard">
       <div class="grid">
-        <div class="card"><div class="muted">Total Pengaduan</div><div class="stat" id="total">0</div></div>
+        <div class="card"><div class="muted">Total Pelaporan</div><div class="stat" id="total">0</div></div>
         <div class="card"><div class="muted">Belum Diproses</div><div class="stat" id="pending">0</div></div>
         <div class="card"><div class="muted">Dalam Proses</div><div class="stat" id="progress">0</div></div>
         <div class="card"><div class="muted">Selesai</div><div class="stat" id="done">0</div></div>
       </div>
       <div class="cols">
         <div class="card">
-          <b>Pengaduan per kategori</b>
+          <b>Pelaporan per kategori</b>
           <p>Operasional: <b id="op">0</b></p>
           <p>HC: <b id="hc">0</b></p>
         </div>
@@ -128,14 +128,14 @@ th{color:var(--muted)}
         </div>
       </div>
       <div class="card">
-        <b>Pengaduan terbaru</b>
+        <b>Pelaporan terbaru</b>
         <div id="latest"></div>
       </div>
     </section>
 
     <section id="page-form" class="hidden">
       <div class="card">
-        <b>1. Pilih kategori pengaduan</b>
+        <b>1. Pilih kategori pelaporan</b>
         <div class="cats" style="margin-top:10px">
           <button type="button" class="cat selected" data-cat="Operasional">
             <div style="font-size:25px">🚗</div>
@@ -150,12 +150,12 @@ th{color:var(--muted)}
         </div>
       </div>
       <div class="card">
-        <b id="formtitle">Form Pengaduan Operasional</b>
+        <b id="formtitle">Form Pelaporan Operasional</b>
         <form id="form">
           <div class="field"><label>Cabang *</label><select id="cabang" required></select></div>
           <div class="field"><label>Nama karyawan *</label><select id="name" required></select></div>
           <div class="field"><label>Employee Id</label><input id="employeeId" readonly placeholder="Terisi otomatis dari data karyawan"></div>
-          <div class="field"><label>Jenis pengaduan *</label><select id="type" required></select></div>
+          <div class="field"><label>Jenis pelaporan *</label><select id="type" required></select></div>
           <div class="field" id="unitfield"><label>Nomor polisi / identitas unit</label><input id="unit" placeholder="B 1234 ABC"></div>
           <div class="cols">
             <div class="field">
@@ -169,7 +169,7 @@ th{color:var(--muted)}
             </div>
             <div class="field"><label>Tanggal pengajuan</label><input type="date" id="date" required></div>
           </div>
-          <div class="field"><label>Judul pengaduan *</label><input id="subject" required></div>
+          <div class="field"><label>Judul pelaporan *</label><input id="subject" required></div>
           <div class="field"><label>Detail / kronologi *</label><textarea id="detail" required></textarea></div>
           <div class="field">
             <label>Link bukti foto / dokumen (opsional)</label>
@@ -180,14 +180,14 @@ th{color:var(--muted)}
             </div>
             <div id="proofPreview" class="muted hidden" style="display:flex;align-items:center;gap:10px;margin-top:4px"></div>
           </div>
-          <button class="btn" id="btnSubmitForm" type="submit">Kirim Pengaduan</button>
+          <button class="btn" id="btnSubmitForm" type="submit">Kirim Pelaporan</button>
         </form>
       </div>
     </section>
 
     <section id="page-mine" class="hidden">
       <div class="card">
-        <b>Pengaduan Saya</b>
+        <b>Pelaporan Saya</b>
         <div id="mine"></div>
       </div>
       <div id="thread" class="card hidden"></div>
@@ -208,7 +208,7 @@ th{color:var(--muted)}
         <div class="tablewrap">
           <table>
             <thead>
-              <tr><th>ID</th><th>Kategori</th><th>Pelapor</th><th>Pengaduan</th><th>Status</th><th></th></tr>
+              <tr><th>ID</th><th>Kategori</th><th>Pelapor</th><th>Pelaporan</th><th>Status</th><th></th></tr>
             </thead>
             <tbody id="rows"></tbody>
           </table>
@@ -603,7 +603,7 @@ function localApi(name, arg) {
       db.messages[id] = [];
       db.notifications.unshift({
         ticket: id,
-        message: `Pengaduan baru "${arg.title}" dibuat oleh ${item.name} dan diteruskan ke ${picName}.`,
+        message: `Pelaporan baru "${arg.title}" dibuat oleh ${item.name} dan diteruskan ke ${picName}.`,
         date: nowStr()
       });
       saveDb(db);
@@ -643,7 +643,7 @@ function localApi(name, arg) {
       c.status = arg.confirmed ? 'Selesai' : 'Dalam Proses';
       if (!db.messages[arg.id]) db.messages[arg.id] = [];
       const msg = arg.confirmed
-        ? 'Pelapor mengonfirmasi pengaduan telah SELESAI.'
+        ? 'Pelapor mengonfirmasi pelaporan telah SELESAI.'
         : 'Pelapor menyatakan kendala BELUM SELESAI, status kembali ke Dalam Proses.';
       db.messages[arg.id].push({
         by: user.name,
@@ -802,9 +802,9 @@ function go(p) {
   $('page-' + p).classList.remove('hidden');
   document.querySelectorAll('.nav').forEach(x => x.classList.toggle('active', x.dataset.page === p));
   $('title').textContent = ({
-    dashboard: 'Dashboard Pengaduan',
-    form: 'Form Pengaduan',
-    mine: 'Pengaduan Saya',
+    dashboard: 'Dashboard Pelaporan',
+    form: 'Form Pelaporan',
+    mine: 'Pelaporan Saya',
     monitor: 'Monitoring PIC',
     notifications: 'Notifikasi',
     kpi: 'Review & KPI'
@@ -862,13 +862,13 @@ function render() {
 
   $('latest').innerHTML = a.slice().reverse().slice(0, 5).map(x =>
     `<div class="notice"><b>${esc(x.id)} · ${esc(x.title)}</b> — ${esc(x.category)} · <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></div>`
-  ).join('') || '<p class="muted">Belum ada pengaduan.</p>';
+  ).join('') || '<p class="muted">Belum ada pelaporan.</p>';
 
   const myEmail = state.user ? String(state.user.email || '').trim().toLowerCase() : '';
   const myComplaints = state.user ? a.filter(x => String(x.email || '').trim().toLowerCase() === myEmail || state.user.role === 'ADMIN') : [];
   $('mine').innerHTML = myComplaints.slice().reverse().map(x =>
     `<div class="notice"><b>${esc(x.id)} · ${esc(x.title)}</b><p class="muted">${esc(x.category)} · ${esc(x.date)} · PIC: ${esc(x.picName)}</p><span class="pill ${statusClass(x.status)}">${esc(x.status)}</span> <button class="btn alt sm" onclick="openThread('${esc(x.id)}')">Lihat jawaban</button></div>`
-  ).join('') || '<p class="muted">Belum ada pengaduan.</p>';
+  ).join('') || '<p class="muted">Belum ada pelaporan.</p>';
 
   let q = ($('query').value || '').toLowerCase(), f = $('filter').value;
   $('rows').innerHTML = a.filter(x => (!f || x.status === f) && [x.id, x.name, x.title, x.unit].join(' ').toLowerCase().includes(q)).slice().reverse().map(x =>
@@ -939,7 +939,7 @@ $('name').onchange = () => { $('employeeId').value = $('name').value; };
 
 function setCategory(c) {
   state.category = c;
-  $('formtitle').textContent = 'Form Pengaduan ' + c;
+  $('formtitle').textContent = 'Form Pelaporan ' + c;
   $('unitfield').classList.toggle('hidden', c === 'HC');
   document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('selected', x.dataset.cat === c));
   $('type').innerHTML = (c === 'HC'
@@ -1101,8 +1101,8 @@ $('form').onsubmit = e => {
   btn.textContent = selectedProofFile ? 'Mengupload bukti & mengirim...' : 'Mengirim...';
   call('apiCreateComplaint', d, r => {
     btn.disabled = false;
-    btn.textContent = 'Kirim Pengaduan';
-    toast('Pengaduan terkirim. Nomor tiket: ' + r.id);
+    btn.textContent = 'Kirim Pelaporan';
+    toast('Pelaporan terkirim. Nomor tiket: ' + r.id);
     $('form').reset();
     clearFormProofFile();
     fillNames();
@@ -1116,7 +1116,7 @@ $('form').onsubmit = e => {
   }, {
     onError: err => {
       btn.disabled = false;
-      btn.textContent = 'Kirim Pengaduan';
+      btn.textContent = 'Kirim Pelaporan';
       fail(err);
     }
   });
