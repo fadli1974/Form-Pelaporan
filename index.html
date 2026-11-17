@@ -171,8 +171,16 @@ th{color:var(--muted)}
           </div>
           <div class="field"><label>Judul pengaduan *</label><input id="subject" required></div>
           <div class="field"><label>Detail / kronologi *</label><textarea id="detail" required></textarea></div>
-          <div class="field"><label>Link bukti foto / dokumen (opsional)</label><input id="proof" placeholder="Link Google Drive atau dokumen"></div>
-          <button class="btn" type="submit">Kirim Pengaduan</button>
+          <div class="field">
+            <label>Link bukti foto / dokumen (opsional)</label>
+            <input id="proof" placeholder="Link Google Drive / dokumen, atau upload file di bawah">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+              <input type="file" id="proofFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="flex:1;min-width:200px;padding:7px">
+              <button type="button" class="btn alt sm hidden" id="btnClearProof">✕ Hapus File</button>
+            </div>
+            <div id="proofPreview" class="muted hidden" style="display:flex;align-items:center;gap:10px;margin-top:4px"></div>
+          </div>
+          <button class="btn" id="btnSubmitForm" type="submit">Kirim Pengaduan</button>
         </form>
       </div>
     </section>
@@ -971,6 +979,88 @@ try {
 initUserSwitcher();
 
 let currentThread = { id: null, messages: [] };
+let selectedProofFile = null;
+let selectedPicProofFile = null;
+
+function formatBytes(n) {
+  return n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+}
+
+function renderProofLinks(val, label) {
+  const s = String(val || '').trim();
+  if (!s) return '';
+  const urls = s.split(/\s+/).filter(x => /^https?:\/\//i.test(x));
+  if (!urls.length) return `📎 ${esc(label)}: ${esc(s)}`;
+  return urls.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">📎 ${esc(label)}${urls.length > 1 ? ' #' + (i + 1) : ''}</a>`).join(' · ');
+}
+
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(new Error('Gagal membaca file.'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function prepareProofFile(file) {
+  if (!file) return null;
+  if (!/^image\//i.test(file.type) && file.size > 5 * 1024 * 1024) {
+    throw new Error('Ukuran dokumen maksimal 5 MB.');
+  }
+  const dataUrl = await readAsDataUrl(file);
+  if (/^image\/(jpeg|jpg|png|webp)$/i.test(file.type) && file.size > 250 * 1024) {
+    try {
+      const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = dataUrl;
+      });
+      const maxDim = 1400;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const compressed = canvas.toDataURL('image/jpeg', 0.8);
+      const b64 = compressed.split(',')[1] || '';
+      const outName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+      return { name: outName, mimeType: 'image/jpeg', dataBase64: b64, sizeBytes: Math.round(b64.length * 0.75), previewUrl: compressed };
+    } catch (e) {}
+  }
+  const b64 = dataUrl.split(',')[1] || '';
+  if (b64.length * 0.75 > 5 * 1024 * 1024) {
+    throw new Error('Ukuran gambar terlalu besar (maksimal 5 MB).');
+  }
+  return { name: file.name, mimeType: file.type || 'application/octet-stream', dataBase64: b64, sizeBytes: file.size, previewUrl: /^image\//i.test(file.type) ? dataUrl : '' };
+}
+
+function clearFormProofFile() {
+  selectedProofFile = null;
+  $('proofFile').value = '';
+  $('btnClearProof').classList.add('hidden');
+  $('proofPreview').classList.add('hidden');
+  $('proofPreview').innerHTML = '';
+}
+
+$('btnClearProof').onclick = clearFormProofFile;
+$('proofFile').onchange = async e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) { clearFormProofFile(); return; }
+  clearError();
+  $('proofPreview').classList.remove('hidden');
+  $('proofPreview').textContent = 'Memproses file...';
+  try {
+    selectedProofFile = await prepareProofFile(file);
+    $('btnClearProof').classList.remove('hidden');
+    $('proofPreview').innerHTML = (selectedProofFile.previewUrl ? `<img src="${selectedProofFile.previewUrl}" alt="Preview" style="height:44px;width:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line)">` : '📄') +
+      `<span>Siap upload ke Google Drive: <b>${esc(selectedProofFile.name)}</b> (${formatBytes(selectedProofFile.sizeBytes)})</span>`;
+  } catch (err) {
+    clearFormProofFile();
+    fail(err);
+  }
+};
 
 function applyLocalUpdate(res, fallbackId) {
   if (!res) return;
@@ -1003,11 +1093,18 @@ $('form').onsubmit = e => {
     priority: $('priority').value,
     title: $('subject').value,
     detail: $('detail').value,
-    proof: $('proof').value
+    proof: $('proof').value,
+    proofFile: selectedProofFile ? { name: selectedProofFile.name, mimeType: selectedProofFile.mimeType, dataBase64: selectedProofFile.dataBase64 } : null
   };
+  const btn = $('btnSubmitForm');
+  btn.disabled = true;
+  btn.textContent = selectedProofFile ? 'Mengupload bukti & mengirim...' : 'Mengirim...';
   call('apiCreateComplaint', d, r => {
+    btn.disabled = false;
+    btn.textContent = 'Kirim Pengaduan';
     toast('Pengaduan terkirim. Nomor tiket: ' + r.id);
     $('form').reset();
+    clearFormProofFile();
     fillNames();
     $('date').value = new Date().toISOString().slice(0, 10);
     if (r.complaint || r.notification) {
@@ -1016,15 +1113,24 @@ $('form').onsubmit = e => {
     } else {
       refresh(() => go('mine'));
     }
+  }, {
+    onError: err => {
+      btn.disabled = false;
+      btn.textContent = 'Kirim Pengaduan';
+      fail(err);
+    }
   });
 };
 
 function renderThreadView(x, messages) {
   $('thread').classList.remove('hidden');
+  const pelaporProof = renderProofLinks(x.proof, 'Lihat Bukti Pelapor');
+  const picProof = renderProofLinks(x.completionProof, 'Lihat Bukti Penyelesaian');
   $('thread').innerHTML = `
     <b>${esc(x.id)} · ${esc(x.title)}</b>
     <p>Status: <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></p>
-    <div class="notice"><b>Hasil Penyelesaian:</b><br>${esc(x.result || 'Belum ada hasil penyelesaian.')}${x.completionProof ? `<br><a href="${esc(x.completionProof)}" target="_blank" rel="noopener">Lihat Bukti Penyelesaian</a>` : ''}</div>
+    ${pelaporProof ? `<p>${pelaporProof}</p>` : ''}
+    <div class="notice"><b>Hasil Penyelesaian:</b><br>${esc(x.result || 'Belum ada hasil penyelesaian.')}${picProof ? `<br>${picProof}` : ''}</div>
     ${messages.map(m => `<div class="bubble ${state.user && m.by === state.user.name ? 'mine' : ''}"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('')}
     <div class="field"><textarea id="replymsg" placeholder="Balas pesan PIC..."></textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1086,19 +1192,39 @@ window.rateResult = id => call('apiRateComplaint', { id, rating: $('rating').val
 });
 
 function renderPicView(x, messages) {
+  selectedPicProofFile = null;
   $('picdetail').classList.remove('hidden');
+  const pelaporProof = renderProofLinks(x.proof, 'Lihat Bukti Pelapor');
+  const existingCompProof = renderProofLinks(x.completionProof, 'Lihat Bukti Penyelesaian');
   $('picdetail').innerHTML = `
     <b>${esc(x.id)} · ${esc(x.title)}</b>
     <p class="muted">Pelapor: ${esc(x.name)} · ID: ${esc(x.employeeId || '-')} · Cabang: ${esc(x.cabang || x.dept)} · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
-    <div class="notice">${esc(x.detail)}${x.proof ? `<br><br><a href="${esc(x.proof)}" target="_blank" rel="noopener">📎 Lihat Bukti Pelapor</a>` : ''}</div>
+    <div class="notice">${esc(x.detail)}${pelaporProof ? `<br><br>${pelaporProof}` : ''}</div>
     <div class="field"><label>Status</label><select id="picstatus">${['Belum Diproses', 'Dalam Proses', 'Menunggu Konfirmasi Karyawan', 'Selesai'].map(s => `<option ${s === x.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     <div class="field"><label>Hasil penyelesaian / jawaban untuk karyawan</label><textarea id="picresult">${esc(x.result || '')}</textarea></div>
-    <div class="field"><label>Link bukti penyelesaian</label><input id="picproof" value="${esc(x.completionProof || '')}"></div>
+    <div class="field">
+      <label>Link bukti penyelesaian</label>
+      <input id="picproof" value="${esc(x.completionProof || '')}" placeholder="Tempel link atau upload file di bawah">
+      <input type="file" id="picProofFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="padding:7px;margin-top:4px">
+      <div id="picProofStatus" class="muted">${existingCompProof || ''}</div>
+    </div>
     <div class="field"><label>Pesan kepada pelapor</label><textarea id="picmessage" placeholder="Tuliskan perkembangan atau hasil pekerjaan..."></textarea></div>
-    <button class="btn" onclick="savePic('${esc(x.id)}')">Simpan & kirim jawaban</button>
+    <button class="btn" id="btnSavePic" onclick="savePic('${esc(x.id)}')">Simpan & kirim jawaban</button>
     <h4>Riwayat percakapan</h4>
     ${messages.map(m => `<div class="bubble"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('') || '<p class="muted">Belum ada percakapan.</p>'}
   `;
+  $('picProofFile').onchange = async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) { selectedPicProofFile = null; $('picProofStatus').innerHTML = existingCompProof || ''; return; }
+    try {
+      selectedPicProofFile = await prepareProofFile(file);
+      $('picProofStatus').textContent = `Siap upload ke Google Drive: ${selectedPicProofFile.name} (${formatBytes(selectedPicProofFile.sizeBytes)})`;
+    } catch (err) {
+      selectedPicProofFile = null;
+      $('picProofFile').value = '';
+      fail(err);
+    }
+  };
 }
 
 window.openPic = id => call('apiGetThread', id, d => {
@@ -1106,21 +1232,35 @@ window.openPic = id => call('apiGetThread', id, d => {
   renderPicView(d.complaint, currentThread.messages);
 });
 
-window.savePic = id => call('apiUpdateComplaint', {
-  id,
-  status: $('picstatus').value,
-  result: $('picresult').value,
-  proof: $('picproof').value,
-  message: $('picmessage').value
-}, res => {
-  toast('Jawaban dikirim kepada pelapor');
-  if (res && res.complaint) {
-    applyLocalUpdate(res, id);
-    renderPicView(res.complaint, currentThread.messages);
-  } else {
-    refresh(() => openPic(id));
+window.savePic = id => {
+  const btn = $('btnSavePic');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = selectedPicProofFile ? 'Mengupload bukti & menyimpan...' : 'Menyimpan...';
   }
-});
+  call('apiUpdateComplaint', {
+    id,
+    status: $('picstatus').value,
+    result: $('picresult').value,
+    proof: $('picproof').value,
+    proofFile: selectedPicProofFile ? { name: selectedPicProofFile.name, mimeType: selectedPicProofFile.mimeType, dataBase64: selectedPicProofFile.dataBase64 } : null,
+    message: $('picmessage').value
+  }, res => {
+    selectedPicProofFile = null;
+    toast('Jawaban dikirim kepada pelapor');
+    if (res && res.complaint) {
+      applyLocalUpdate(res, id);
+      renderPicView(res.complaint, currentThread.messages);
+    } else {
+      refresh(() => openPic(id));
+    }
+  }, {
+    onError: err => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Simpan & kirim jawaban'; }
+      fail(err);
+    }
+  });
+};
 
 function loadKpi() { render(); }
 function loadKpiOld() {
