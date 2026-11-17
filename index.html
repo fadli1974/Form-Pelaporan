@@ -103,7 +103,7 @@ th{color:var(--muted)}
         <div id="who" class="muted">Memuat akun...</div>
       </div>
       <div class="top-actions">
-        <button class="btn" id="quick">+ Pengaduan</button>
+        <button class="btn hidden" id="quick">+ Pengaduan</button>
       </div>
     </div>
 
@@ -714,7 +714,6 @@ function refresh(cb) {
     const staff = isStaff(String(u.role || "").trim().toUpperCase()) || isStaff(String(getCurrentDemoUser().role || "").trim().toUpperCase());
     document.querySelector('[data-page="monitor"]').classList.toggle('hidden', !staff);
     document.querySelector('[data-page="kpi"]').classList.remove('hidden');
-    $('quick').classList.remove('hidden');
     if (!staff && !$('page-monitor').classList.contains('hidden')) go('dashboard');
     render();
     if (cb) cb();
