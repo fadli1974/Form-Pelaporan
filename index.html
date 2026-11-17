@@ -341,7 +341,7 @@ function allowedCategories(role) {
 function isStaff(role) { return ['OPS', 'HC', 'ADMIN', 'ATASAN'].includes(role); }
 function canSeeComplaint(u, c) {
   if (!allowedCategories(u.role).includes(c.category)) return false;
-  if (u.role === 'KARYAWAN') return c.email === u.email;
+  if (u.role === 'KARYAWAN') return String(c.email).toLowerCase() === String(u.email).toLowerCase();
   return true;
 }
 
