@@ -951,7 +951,7 @@ function setCategory(c) {
 // Format otomatis nomor polisi: huruf besar + spasi (contoh: B 1234 ABC)
 function formatPlate(v) {
   const raw = String(v).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const m = raw.match(/^([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})$/) || raw.match(/^([A-Z]{1,2})(\d{0,4})$/);
+  const m = raw.match(/^([A-Z]{1,2})(\d{1,5})([A-Z]{0,3})$/) || raw.match(/^([A-Z]{1,2})(\d{0,5})$/);
   if (!m) return String(v).toUpperCase(); // bukan pola plat, biarkan huruf besar saja (identitas unit lain)
   return [m[1], m[2], m[3]].filter(Boolean).join(' ') + (/\s$/.test(v) && m[1] && !m[2] ? ' ' : '');
 }
@@ -1127,7 +1127,10 @@ function renderThreadView(x, messages) {
   const pelaporProof = renderProofLinks(x.proof, 'Lihat Bukti Pelapor');
   const picProof = renderProofLinks(x.completionProof, 'Lihat Bukti Penyelesaian');
   $('thread').innerHTML = `
-    <b>${esc(x.id)} · ${esc(x.title)}</b>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <b>${esc(x.id)} · ${esc(x.title)}</b>
+      <button type="button" class="btn alt sm" onclick="$('thread').classList.add('hidden');$('thread').innerHTML=''">✕ Tutup</button>
+    </div>
     <p>Status: <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></p>
     ${pelaporProof ? `<p>${pelaporProof}</p>` : ''}
     <div class="notice"><b>Hasil Penyelesaian:</b><br>${esc(x.result || 'Belum ada hasil penyelesaian.')}${picProof ? `<br>${picProof}` : ''}</div>
@@ -1197,7 +1200,10 @@ function renderPicView(x, messages) {
   const pelaporProof = renderProofLinks(x.proof, 'Lihat Bukti Pelapor');
   const existingCompProof = renderProofLinks(x.completionProof, 'Lihat Bukti Penyelesaian');
   $('picdetail').innerHTML = `
-    <b>${esc(x.id)} · ${esc(x.title)}</b>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <b>${esc(x.id)} · ${esc(x.title)}</b>
+      <button type="button" class="btn alt sm" onclick="$('picdetail').classList.add('hidden');$('picdetail').innerHTML=''">✕ Tutup</button>
+    </div>
     <p class="muted">Pelapor: ${esc(x.name)} · ID: ${esc(x.employeeId || '-')} · Cabang: ${esc(x.cabang || x.dept)} · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
     <div class="notice">${esc(x.detail)}${pelaporProof ? `<br><br>${pelaporProof}` : ''}</div>
     <div class="field"><label>Status</label><select id="picstatus">${['Belum Diproses', 'Dalam Proses', 'Menunggu Konfirmasi Karyawan', 'Selesai'].map(s => `<option ${s === x.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
@@ -1247,12 +1253,13 @@ window.savePic = id => {
     message: $('picmessage').value
   }, res => {
     selectedPicProofFile = null;
+    $('picdetail').classList.add('hidden');
+    $('picdetail').innerHTML = '';
     toast('Jawaban dikirim kepada pelapor');
     if (res && res.complaint) {
       applyLocalUpdate(res, id);
-      renderPicView(res.complaint, currentThread.messages);
     } else {
-      refresh(() => openPic(id));
+      refresh();
     }
   }, {
     onError: err => {
