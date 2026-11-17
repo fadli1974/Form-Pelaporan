@@ -328,7 +328,7 @@ function initUserSwitcher() {
     $('thread').classList.add('hidden');
     $('picdetail').classList.add('hidden');
     go('dashboard');
-    refresh(() => toast('Masuk sebagai ' + getCurrentDemoUser().name));
+    refresh(() => toast('Masuk sebagai ' + (state.user && state.user.role === 'KARYAWAN' ? 'Karyawan' : (state.user ? state.user.name : target.name))));
   };
 }
 
