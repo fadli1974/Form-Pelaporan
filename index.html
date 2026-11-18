@@ -125,6 +125,13 @@ th{color:var(--muted)}
         <div class="card">
           <b>Informasi akun</b>
           <p id="account" class="muted"></p>
+          <div id="deviceEmailBox" class="hidden" style="margin-top:8px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input id="dashEmailInput" type="email" autocomplete="email" inputmode="email" placeholder="Masukkan email HP Anda (contoh: nama@gmail.com)" style="flex:1;min-width:190px;padding:7px">
+              <button type="button" class="btn alt sm" id="btnSaveDashEmail">Simpan Email</button>
+            </div>
+            <div class="muted" style="margin-top:4px">Email perangkat ini otomatis direkam saat melapor &amp; memfilter Pelaporan Saya.</div>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -155,6 +162,14 @@ th{color:var(--muted)}
           <div class="field"><label>Cabang *</label><select id="cabang" required></select></div>
           <div class="field"><label>Nama karyawan *</label><select id="name" required></select></div>
           <div class="field"><label>Employee Id</label><input id="employeeId" readonly placeholder="Terisi otomatis dari data karyawan"></div>
+          <div class="field" id="emailField">
+            <label for="reporterEmail">Email *</label>
+            <input id="reporterEmail" name="email" type="email" autocomplete="email" inputmode="email" placeholder="Ketik atau pilih saran email di HP Anda" required>
+            <label id="rememberEmailWrap" style="display:flex;align-items:center;gap:8px;font-weight:normal;font-size:12px;margin-top:2px;cursor:pointer">
+              <input type="checkbox" id="rememberEmail" checked style="width:auto;margin:0">
+              <span id="rememberEmailText">Rekam email ini di perangkat untuk pelaporan berikutnya</span>
+            </label>
+          </div>
           <div class="field"><label>Jenis pelaporan *</label><select id="type" required></select></div>
           <div class="field" id="unitfield"><label>Nomor polisi / identitas unit</label><input id="unit" placeholder="B 1234 ABC"></div>
           <div class="cols">
@@ -288,6 +303,22 @@ const USER_KEY = 'dumpedia_pengaduan_user_v1';
 const PIN_KEY = 'dumpedia_pengaduan_pin_v1';
 const API_URL_KEY = 'dumpedia_pengaduan_api_url_v1';
 const USERS_CACHE_KEY = 'pengaduan_users_cache_v1';
+const REPORTER_EMAIL_KEY = 'pelaporan_karyawan_email_v1';
+
+function getReporterEmail() {
+  return (localStorage.getItem(REPORTER_EMAIL_KEY) || '').trim();
+}
+function isValidEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+}
+function saveReporterEmail(email) {
+  const clean = String(email || '').trim();
+  if (isValidEmail(clean)) {
+    localStorage.setItem(REPORTER_EMAIL_KEY, clean);
+  } else {
+    localStorage.removeItem(REPORTER_EMAIL_KEY);
+  }
+}
 
 let knownUsers = [];
 try {
@@ -327,7 +358,9 @@ function getApiUrl() {
 
 function getGuestUser() {
   const fromSheet = knownUsers.find(u => String(u.role || '').trim().toUpperCase() === 'KARYAWAN');
-  return fromSheet || GUEST_FALLBACK;
+  const base = fromSheet || GUEST_FALLBACK;
+  const devEmail = getReporterEmail();
+  return devEmail ? { ...base, email: devEmail } : base;
 }
 
 function getCurrentDemoUser() {
@@ -382,6 +415,7 @@ function initUserSwitcher() {
       state = { ...state, user: guest, complaints: filteredComplaints, notifications: prevNotifs.filter(n => ids.has(String(n.ticket))) };
       $('who').textContent = guest.name + ' · ' + guest.email + ' · KARYAWAN';
       $('account').textContent = guest.name + ' / ' + guest.dept + ' / KARYAWAN';
+      syncEmailUi(guest);
       document.querySelector('[data-page="monitor"]').classList.add('hidden');
       if (!$('page-monitor').classList.contains('hidden')) go('dashboard');
       else render();
@@ -587,7 +621,7 @@ function localApi(name, arg) {
         name: arg.name || user.name,
         employeeId: arg.employeeId || '',
         cabang: arg.cabang || '',
-        email: user.email,
+        email: arg.email || user.email,
         dept: arg.cabang || user.dept,
         title: arg.title,
         detail: arg.detail,
@@ -827,6 +861,7 @@ function applyBootstrapData(d) {
   }
   $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
   $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
+  syncEmailUi(u);
   if (d.employees && d.employees.length) {
     employeesSyncedFromServer = true;
     try { localStorage.setItem('dumpedia_employees_cache_v1', JSON.stringify(d.employees)); } catch (e) {}
@@ -935,7 +970,53 @@ function fillNames() {
 }
 
 $('cabang').onchange = fillNames;
-$('name').onchange = () => { $('employeeId').value = $('name').value; };
+$('name').onchange = () => {
+  $('employeeId').value = $('name').value;
+  if (state.user && state.user.role === 'KARYAWAN' && !$('reporterEmail').value.trim()) {
+    const saved = getReporterEmail();
+    if (saved) $('reporterEmail').value = saved;
+    updateRememberLabel();
+  }
+};
+
+function updateRememberLabel() {
+  const val = $('reporterEmail').value.trim();
+  $('rememberEmailText').textContent = isValidEmail(val)
+    ? `Rekam ${val} sebagai email yang disertakan dengan respons saya`
+    : 'Rekam email ini sebagai email yang disertakan dengan respons saya';
+}
+
+function syncEmailUi(u) {
+  const activeUser = u || state.user || getGuestUser();
+  const isEmp = String(activeUser.role || '').toUpperCase() === 'KARYAWAN';
+  $('deviceEmailBox').classList.toggle('hidden', !isEmp);
+  $('rememberEmailWrap').classList.toggle('hidden', !isEmp);
+  if (isEmp) {
+    const saved = getReporterEmail();
+    $('dashEmailInput').value = saved;
+    $('reporterEmail').value = saved;
+    $('rememberEmail').checked = true;
+  } else {
+    $('reporterEmail').value = activeUser.email || '';
+  }
+  updateRememberLabel();
+}
+
+$('reporterEmail').oninput = updateRememberLabel;
+$('btnSaveDashEmail').onclick = () => {
+  const val = $('dashEmailInput').value.trim();
+  if (!isValidEmail(val)) {
+    fail(new Error('Masukkan alamat email yang valid (contoh: nama@gmail.com).'));
+    $('dashEmailInput').focus();
+    return;
+  }
+  saveReporterEmail(val);
+  const g = getGuestUser();
+  localStorage.setItem(USER_KEY, g.email);
+  initUserSwitcher();
+  toast('Email perangkat disimpan: ' + val);
+  refresh();
+};
 
 function setCategory(c) {
   state.category = c;
@@ -1082,11 +1163,29 @@ function applyLocalUpdate(res, fallbackId) {
 
 $('form').onsubmit = e => {
   e.preventDefault();
+  const repEmail = $('reporterEmail').value.trim();
+  if (!isValidEmail(repEmail)) {
+    fail(new Error('Masukkan alamat email yang valid.'));
+    $('reporterEmail').focus();
+    return;
+  }
+  const isEmp = !state.user || state.user.role === 'KARYAWAN';
+  const prevEmail = state.user ? String(state.user.email || '').trim().toLowerCase() : '';
+  if (isEmp) {
+    if ($('rememberEmail').checked) {
+      saveReporterEmail(repEmail);
+      localStorage.setItem(USER_KEY, repEmail);
+    } else {
+      saveReporterEmail('');
+      localStorage.setItem(USER_KEY, getGuestUser().email);
+    }
+  }
   const d = {
     category: state.category,
     cabang: $('cabang').value,
     employeeId: $('employeeId').value,
     name: $('name').selectedOptions[0] ? $('name').selectedOptions[0].textContent : '',
+    email: repEmail,
     date: $('date').value,
     type: $('type').value,
     unit: $('unit').value,
@@ -1107,7 +1206,17 @@ $('form').onsubmit = e => {
     clearFormProofFile();
     fillNames();
     $('date').value = new Date().toISOString().slice(0, 10);
-    if (r.complaint || r.notification) {
+    if (isEmp && $('rememberEmail').checked) {
+      const updatedUser = { ...(state.user || getGuestUser()), email: repEmail };
+      state.user = updatedUser;
+      initUserSwitcher();
+      $('who').textContent = updatedUser.name + ' · ' + updatedUser.email + ' · ' + updatedUser.role;
+      $('account').textContent = updatedUser.name + ' / ' + updatedUser.dept + ' / ' + updatedUser.role;
+    }
+    syncEmailUi(state.user);
+    if (isEmp && prevEmail !== repEmail.toLowerCase()) {
+      refresh(() => go('mine'));
+    } else if (r.complaint || r.notification) {
       applyLocalUpdate(r, r.id);
       go('mine');
     } else {
