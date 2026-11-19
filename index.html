@@ -162,13 +162,14 @@ th{color:var(--muted)}
       </div>
       <div class="card">
         <b id="formtitle">Form Pelaporan Operasional</b>
-        <form id="form">
+        <form id="form" novalidate>
           <div class="field"><label>Cabang *</label><select id="cabang" required></select></div>
           <div class="field"><label>Nama karyawan *</label><select id="name" required></select></div>
           <div class="field"><label>Employee Id</label><input id="employeeId" readonly placeholder="Terisi otomatis dari data karyawan"></div>
           <div class="field" id="emailField">
             <label for="reporterEmail">Email *</label>
             <input id="reporterEmail" name="email" type="email" autocomplete="email" inputmode="email" placeholder="Ketik atau pilih saran email di HP Anda" required>
+            <div id="emailError" class="muted hidden" style="color:#a42c2c;font-weight:bold;margin-top:2px"></div>
             <label id="rememberEmailWrap" style="display:flex;align-items:center;gap:8px;font-weight:normal;font-size:12px;margin-top:2px;cursor:pointer">
               <input type="checkbox" id="rememberEmail" checked style="width:auto;margin:0">
               <span id="rememberEmailText">Rekam email ini di perangkat untuk pelaporan berikutnya</span>
@@ -332,11 +333,17 @@ try {
   }
 } catch (e) {}
 
+function isPlaceholderEmail(s) {
+  const low = String(s || '').trim().toLowerCase();
+  return !low || low === 'karyawan@gmail.com' || low === 'karyawan@dumpedia.com';
+}
 function getReporterEmail() {
-  return (localStorage.getItem(REPORTER_EMAIL_KEY) || '').trim();
+  const saved = (localStorage.getItem(REPORTER_EMAIL_KEY) || '').trim();
+  return isPlaceholderEmail(saved) ? '' : saved;
 }
 function isValidEmail(s) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
+  const clean = String(s || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean) && !isPlaceholderEmail(clean);
 }
 function saveReporterEmail(email) {
   const clean = String(email || '').trim();
@@ -1130,7 +1137,19 @@ $('dashName').onchange = () => {
   if (emp && emp.email) $('dashEmailInput').value = emp.email;
 };
 
+function showEmailError(msg) {
+  $('emailError').textContent = msg;
+  $('emailError').classList.remove('hidden');
+  $('reporterEmail').style.borderColor = '#a42c2c';
+}
+function clearEmailError() {
+  $('emailError').classList.add('hidden');
+  $('emailError').textContent = '';
+  $('reporterEmail').style.borderColor = '';
+}
+
 function updateRememberLabel() {
+  clearEmailError();
   const val = $('reporterEmail').value.trim();
   $('rememberEmailText').textContent = isValidEmail(val)
     ? `Rekam ${val} sebagai email yang disertakan dengan respons saya`
@@ -1143,7 +1162,7 @@ function syncEmailUi(u) {
   $('deviceEmailBox').classList.toggle('hidden', !isEmp);
   $('rememberEmailWrap').classList.toggle('hidden', !isEmp);
   if (isEmp) {
-    const saved = getReporterEmail() || (isValidEmail(activeUser.email) && activeUser.email !== GUEST_FALLBACK.email ? activeUser.email : '');
+    const saved = getReporterEmail() || (isValidEmail(activeUser.email) ? activeUser.email : '');
     $('dashEmailInput').value = saved;
     if (!$('reporterEmail').value.trim() || $('reporterEmail').value.trim() === saved) $('reporterEmail').value = saved;
     $('rememberEmail').checked = true;
@@ -1371,10 +1390,48 @@ function applyLocalUpdate(res, fallbackId) {
 
 $('form').onsubmit = e => {
   e.preventDefault();
+  clearError();
+  clearEmailError();
   const repEmail = $('reporterEmail').value.trim();
+  if (!$('cabang').value) {
+    fail(new Error('Pilih Cabang terlebih dahulu.'));
+    $('cabang').focus();
+    return;
+  }
+  if (!$('name').value) {
+    fail(new Error('Pilih Nama karyawan terlebih dahulu.'));
+    $('name').focus();
+    return;
+  }
   if (!isValidEmail(repEmail)) {
-    fail(new Error('Masukkan alamat email yang valid.'));
+    const msg = repEmail
+      ? 'Format email tidak valid. Masukkan alamat email yang benar.'
+      : 'Email wajib diisi. Data tidak bisa terkirim tanpa alamat email.';
+    showEmailError(msg);
+    fail(new Error(msg));
+    toast('Email wajib diisi!');
+    $('emailField').scrollIntoView({ behavior: 'smooth', block: 'center' });
     $('reporterEmail').focus();
+    return;
+  }
+  if (!$('type').value) {
+    fail(new Error('Pilih Jenis pelaporan terlebih dahulu.'));
+    $('type').focus();
+    return;
+  }
+  if (!$('date').value) {
+    fail(new Error('Tanggal pengajuan wajib diisi.'));
+    $('date').focus();
+    return;
+  }
+  if (!$('subject').value.trim()) {
+    fail(new Error('Judul pelaporan wajib diisi.'));
+    $('subject').focus();
+    return;
+  }
+  if (!$('detail').value.trim()) {
+    fail(new Error('Detail / kronologi wajib diisi.'));
+    $('detail').focus();
     return;
   }
   const isEmp = !state.user || state.user.role === 'KARYAWAN';
