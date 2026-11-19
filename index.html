@@ -416,13 +416,19 @@ function resetToGuest() {
   initUserSwitcher();
 }
 
+function renderUserHeader(u) {
+  const tag = u.role === 'KARYAWAN' ? (u.employeeId || 'KARYAWAN') : u.role;
+  $('who').textContent = u.name + ' · ' + u.email + ' · ' + tag;
+  $('account').textContent = u.name + ' / ' + u.dept + ' / ' + tag;
+}
+
 function initUserSwitcher() {
   const guest = (state.user && state.user.role === 'KARYAWAN') ? state.user : getGuestUser();
   const staffList = knownUsers.filter(u => String(u.role || '').trim().toUpperCase() !== 'KARYAWAN');
-  const list = [{ key: KARYAWAN_MODE, email: guest.email, name: guest.name || 'Karyawan', role: 'KARYAWAN' }, ...staffList.map(u => ({ ...u, key: u.email }))];
-  const sig = (knownUsers.length ? '1|' : '0|') + JSON.stringify(list.map(u => [u.key, u.name, u.role]));
+  const list = [{ key: KARYAWAN_MODE, email: guest.email, name: guest.name || 'Karyawan', employeeId: guest.employeeId || '', role: 'KARYAWAN' }, ...staffList.map(u => ({ ...u, key: u.email }))];
+  const sig = (knownUsers.length ? '1|' : '0|') + JSON.stringify(list.map(u => [u.key, u.name, u.employeeId || '', u.role]));
   const current = getCurrentDemoUser();
-  const label = u => u.role === 'KARYAWAN' ? (u.name && u.name !== 'Karyawan' ? `${u.name} (KARYAWAN)` : 'Karyawan (Umum)') : `${u.name} (${u.role})`;
+  const label = u => u.role === 'KARYAWAN' ? (u.name && u.name !== 'Karyawan' ? `${u.name} (${u.employeeId || 'KARYAWAN'})` : 'Karyawan (Umum)') : `${u.name} (${u.role})`;
 
   if (sig !== lastUsersSig) {
     lastUsersSig = sig;
@@ -453,8 +459,7 @@ function initUserSwitcher() {
       const filteredComplaints = prevComplaints.filter(c => canSeeComplaint(activeGuest, c));
       const ids = new Set(filteredComplaints.map(c => String(c.id)));
       state = { ...state, user: activeGuest, complaints: filteredComplaints, notifications: prevNotifs.filter(n => ids.has(String(n.ticket))) };
-      $('who').textContent = activeGuest.name + ' · ' + activeGuest.email + ' · KARYAWAN';
-      $('account').textContent = activeGuest.name + ' / ' + activeGuest.dept + ' / KARYAWAN';
+      renderUserHeader(activeGuest);
       syncEmailUi(activeGuest);
       document.querySelector('[data-page="monitor"]').classList.add('hidden');
       if (!$('page-monitor').classList.contains('hidden')) go('dashboard');
@@ -909,8 +914,7 @@ function applyBootstrapData(d) {
     if (u.role === 'KARYAWAN') localStorage.setItem(USER_KEY, KARYAWAN_MODE);
     initUserSwitcher();
   }
-  $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
-  $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
+  renderUserHeader(u);
   syncEmailUi(u);
   // Monitoring PIC hanya untuk staff terverifikasi server (OPS, HC, ADMIN, ATASAN)
   const staff = isStaff(String(u.role || '').trim().toUpperCase());
@@ -1063,8 +1067,7 @@ function applyKaryawanIdentity(emp, emailOverride) {
     role: 'KARYAWAN'
   };
   state.user = updated;
-  $('who').textContent = updated.name + ' · ' + updated.email + ' · ' + updated.role;
-  $('account').textContent = updated.name + ' / ' + updated.dept + ' / ' + updated.role;
+  renderUserHeader(updated);
   initUserSwitcher();
   syncEmailUi(updated);
   if (prevEmail && isValidEmail(chosenEmail) && prevEmail !== chosenEmail.toLowerCase()) {
@@ -1384,8 +1387,7 @@ $('form').onsubmit = e => {
       };
       state.user = updatedUser;
       initUserSwitcher();
-      $('who').textContent = updatedUser.name + ' · ' + updatedUser.email + ' · ' + updatedUser.role;
-      $('account').textContent = updatedUser.name + ' / ' + updatedUser.dept + ' / ' + updatedUser.role;
+      renderUserHeader(updatedUser);
       selectEmployeeOn($('cabang'), $('name'), $('employeeId'), d.cabang, d.employeeId);
       if (prevEmail !== repEmail.toLowerCase()) {
         state.complaints = (state.complaints || []).filter(c => canSeeComplaint(updatedUser, c));
