@@ -133,6 +133,7 @@ th{color:var(--muted)}
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input id="dashEmailInput" type="email" autocomplete="email" inputmode="email" placeholder="Masukkan email HP Anda (contoh: nama@gmail.com)" style="flex:1;min-width:190px;padding:7px">
               <button type="button" class="btn alt sm" id="btnSaveDashEmail">Simpan</button>
+              <button type="button" class="btn alt sm hidden" id="btnResetDashEmail">Reset</button>
             </div>
             <div class="muted" style="margin-top:4px">Pilih nama &amp; email HP Anda agar otomatis terhubung dengan sheet Nama Karyawan &amp; Pelaporan Saya.</div>
           </div>
@@ -300,7 +301,7 @@ th{color:var(--muted)}
 // URL Web App Google Apps Script (terhubung ke Google Sheets):
 const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzLQCZe8SHftfoP5gwOFXHDMZutX7cTi1Tc3j71pp2tS_iaN-Y4RhkLNVlM7ljZq0aE/exec';
 
-const GUEST_FALLBACK = { email: 'Karyawan@gmail.com', name: 'Karyawan', dept: 'Karyawan', role: 'KARYAWAN' };
+const GUEST_FALLBACK = { email: '', name: '', dept: '', cabang: '', employeeId: '', role: 'KARYAWAN' };
 const DEMO_USERS = [GUEST_FALLBACK];
 
 const STORAGE_KEY = 'dumpedia_pengaduan_db_v1';
@@ -405,8 +406,6 @@ function getApiUrl() {
 }
 
 function getGuestUser() {
-  const fromSheet = knownUsers.find(u => String(u.role || '').trim().toUpperCase() === 'KARYAWAN');
-  const base = fromSheet || GUEST_FALLBACK;
   const devEmail = getReporterEmail();
   const prof = getReporterProfile();
   let emp = null;
@@ -414,11 +413,10 @@ function getGuestUser() {
     if (devEmail) emp = employees.find(e => String(e.email || '').trim().toLowerCase() === devEmail.toLowerCase());
     if (!emp && prof && prof.employeeId) emp = employees.find(e => String(e.employeeId || '').trim().toLowerCase() === String(prof.employeeId).trim().toLowerCase());
   }
-  const email = devEmail || (emp && emp.email) || base.email;
-  const name = emp ? emp.name : (prof && prof.name ? prof.name : base.name);
-  const dept = emp ? (emp.cabang || base.dept) : (prof && prof.cabang ? prof.cabang : base.dept);
+  const email = devEmail || (emp && !isPlaceholderEmail(emp.email) ? emp.email : '');
+  const name = emp ? emp.name : (prof && prof.name ? prof.name : '');
+  const dept = emp ? (emp.cabang || '') : (prof && prof.cabang ? prof.cabang : '');
   return {
-    ...base,
     email: email,
     name: name,
     dept: dept,
@@ -446,9 +444,22 @@ function resetToGuest() {
 }
 
 function renderUserHeader(u) {
-  const tag = u.role === 'KARYAWAN' ? (u.employeeId || 'KARYAWAN') : u.role;
-  $('who').textContent = u.name + ' · ' + u.email + ' · ' + tag;
-  $('account').textContent = u.name + ' / ' + u.dept + ' / ' + tag;
+  if (!u || u.role === 'KARYAWAN') {
+    const hasName = Boolean(u && u.name && u.name !== 'Karyawan');
+    const hasEmail = Boolean(u && isValidEmail(u.email));
+    if (!hasName && !hasEmail) {
+      $('who').textContent = 'Silakan pilih nama & email pelapor';
+      $('account').textContent = 'Belum ada data pelapor terpilih.';
+      return;
+    }
+    const parts = [hasName ? u.name : 'Karyawan', hasEmail ? u.email : 'Email belum diisi'];
+    if (u.employeeId) parts.push(u.employeeId);
+    $('who').textContent = parts.join(' · ');
+    $('account').textContent = [hasName ? u.name : 'Karyawan', u.dept || '-', u.employeeId || 'KARYAWAN'].join(' / ');
+    return;
+  }
+  $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
+  $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
 }
 
 function initUserSwitcher() {
@@ -493,7 +504,7 @@ function initUserSwitcher() {
       document.querySelector('[data-page="monitor"]').classList.add('hidden');
       if (!$('page-monitor').classList.contains('hidden')) go('dashboard');
       else render();
-      toast('Masuk sebagai ' + (activeGuest.name && activeGuest.name !== 'Karyawan' ? activeGuest.name : 'Karyawan'));
+      toast('Masuk sebagai ' + (activeGuest.name ? activeGuest.name : 'Karyawan'));
       if (getApiUrl()) refresh(null, { silent: true });
       return;
     }
@@ -926,7 +937,7 @@ function applyBootstrapData(d) {
   d.complaints = (d.complaints || []).filter(c => canSeeComplaint(u, c));
   const ids = new Set(d.complaints.map(c => String(c.id)));
   d.notifications = (d.notifications || []).filter(n => ids.has(String(n.ticket)));
-  state = d;
+  state = { ...d, category: state.category || 'Operasional' };
   if (u.role === 'KARYAWAN' && u.name && u.name !== 'Karyawan') {
     saveReporterProfile({ cabang: u.cabang || u.dept || '', employeeId: u.employeeId || '', name: u.name });
   }
@@ -937,7 +948,7 @@ function applyBootstrapData(d) {
   }
   if (d.employees && d.employees.length) {
     employeesSyncedFromServer = true;
-    try { localStorage.setItem('dumpedia_employees_cache_v1', JSON.stringify(d.employees)); } catch (e) {}
+    try { localStorage.setItem('pelaporan_employees_cache_v2', JSON.stringify(d.employees)); } catch (e) {}
     initEmployeeForm(d.employees);
   } else if (!employees.length) {
     initEmployeeForm(SAMPLE_EMPLOYEES);
@@ -981,7 +992,7 @@ function render() {
   ).join('') || '<p class="muted">Belum ada pelaporan.</p>';
 
   const myEmail = state.user ? String(state.user.email || '').trim().toLowerCase() : '';
-  const myComplaints = state.user ? a.filter(x => String(x.email || '').trim().toLowerCase() === myEmail || state.user.role === 'ADMIN') : [];
+  const myComplaints = (state.user && (myEmail || state.user.role === 'ADMIN')) ? a.filter(x => String(x.email || '').trim().toLowerCase() === myEmail || state.user.role === 'ADMIN') : [];
   $('mine').innerHTML = myComplaints.slice().reverse().map(x =>
     `<div class="notice"><b>${esc(x.id)} · ${esc(x.title)}</b><p class="muted">${esc(x.category)} · ${esc(x.date)} · PIC: ${esc(x.picName)}</p><span class="pill ${statusClass(x.status)}">${esc(x.status)}</span> <button class="btn alt sm" onclick="openThread('${esc(x.id)}')">Lihat jawaban</button></div>`
   ).join('') || '<p class="muted">Belum ada pelaporan.</p>';
@@ -1079,7 +1090,7 @@ function syncEmailToEmployeeSheet(emp, email) {
   if (String(emp.email || '').trim().toLowerCase() === clean.toLowerCase()) return;
   emp.email = clean;
   lastEmployeesSig = JSON.stringify(employees);
-  try { localStorage.setItem('dumpedia_employees_cache_v1', lastEmployeesSig); } catch (e) {}
+  try { localStorage.setItem('pelaporan_employees_cache_v2', lastEmployeesSig); } catch (e) {}
   if (getApiUrl()) {
     call('apiSaveEmployeeEmail', { employeeId: emp.employeeId, name: emp.name, cabang: emp.cabang, email: clean }, null, { silent: true, onError: () => {} });
   }
@@ -1166,7 +1177,14 @@ function syncEmailUi(u) {
     $('dashEmailInput').value = saved;
     if (!$('reporterEmail').value.trim() || $('reporterEmail').value.trim() === saved) $('reporterEmail').value = saved;
     $('rememberEmail').checked = true;
-    selectEmployeeOn($('dashCabang'), $('dashName'), null, activeUser.cabang || activeUser.dept, activeUser.employeeId);
+    const hasIdentity = Boolean(saved || activeUser.employeeId);
+    $('btnResetDashEmail').classList.toggle('hidden', !hasIdentity);
+    if (activeUser.employeeId) {
+      selectEmployeeOn($('dashCabang'), $('dashName'), null, activeUser.cabang || activeUser.dept, activeUser.employeeId);
+    } else {
+      $('dashCabang').value = '';
+      populateNamesFor($('dashCabang'), $('dashName'));
+    }
   } else {
     $('reporterEmail').value = activeUser.email || '';
   }
@@ -1208,7 +1226,7 @@ $('btnSaveDashEmail').onclick = () => {
     const needSheetWrite = getApiUrl() && String(emp.email || '').trim().toLowerCase() !== val.toLowerCase();
     emp.email = val;
     lastEmployeesSig = JSON.stringify(employees);
-    try { localStorage.setItem('dumpedia_employees_cache_v1', lastEmployeesSig); } catch (e) {}
+    try { localStorage.setItem('pelaporan_employees_cache_v2', lastEmployeesSig); } catch (e) {}
     initUserSwitcher();
     if (needSheetWrite) {
       const btn = $('btnSaveDashEmail');
@@ -1233,7 +1251,22 @@ $('btnSaveDashEmail').onclick = () => {
   doneSync();
 };
 
+$('btnResetDashEmail').onclick = () => {
+  saveReporterEmail('');
+  saveReporterProfile(null);
+  localStorage.setItem(USER_KEY, KARYAWAN_MODE);
+  $('cabang').value = '';
+  fillNames();
+  $('reporterEmail').value = '';
+  $('dashCabang').value = '';
+  populateNamesFor($('dashCabang'), $('dashName'));
+  $('dashEmailInput').value = '';
+  toast('Data identitas perangkat dikosongkan');
+  refresh();
+};
+
 function setCategory(c) {
+  c = c || 'Operasional';
   const prevCat = state.category;
   const prevType = $('type').value;
   state.category = c;
@@ -1248,7 +1281,7 @@ function setCategory(c) {
     seen.add(t.toLowerCase());
     return true;
   });
-  $('type').innerHTML = list.map(item => {
+  $('type').innerHTML = '<option value="">-- Pilih jenis pelaporan --</option>' + list.map(item => {
     const t = String(item.type || item || '').trim();
     return `<option value="${esc(t)}">${esc(t)}</option>`;
   }).join('');
@@ -1280,8 +1313,10 @@ setCategory('Operasional');
 // Saat aplikasi dibuka selalu mulai sebagai Karyawan (umum); staf harus memilih akun & PIN lagi
 localStorage.setItem(USER_KEY, KARYAWAN_MODE);
 sessionStorage.removeItem(PIN_KEY);
+// Jika belum ada email pribadi tersimpan, bersihkan profil bawaan agar awal buka link bersih & kosong
+if (!getReporterEmail()) saveReporterProfile(null);
 try {
-  const cachedEmp = JSON.parse(localStorage.getItem('dumpedia_employees_cache_v1') || 'null');
+  const cachedEmp = JSON.parse(localStorage.getItem('pelaporan_employees_cache_v2') || 'null');
   if (cachedEmp && cachedEmp.length) initEmployeeForm(cachedEmp);
 } catch (e) {}
 initUserSwitcher();
@@ -1466,7 +1501,7 @@ $('form').onsubmit = e => {
     if (isEmp && submittedEmp) {
       submittedEmp.email = repEmail;
       lastEmployeesSig = JSON.stringify(employees);
-      try { localStorage.setItem('dumpedia_employees_cache_v1', lastEmployeesSig); } catch (e) {}
+      try { localStorage.setItem('pelaporan_employees_cache_v2', lastEmployeesSig); } catch (e) {}
     }
     $('form').reset();
     clearFormProofFile();
