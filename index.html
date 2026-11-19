@@ -126,11 +126,15 @@ th{color:var(--muted)}
           <b>Informasi akun</b>
           <p id="account" class="muted"></p>
           <div id="deviceEmailBox" class="hidden" style="margin-top:8px">
+            <div class="cols" style="gap:8px;margin-bottom:6px">
+              <select id="dashCabang" style="padding:7px"></select>
+              <select id="dashName" style="padding:7px"></select>
+            </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <input id="dashEmailInput" type="email" autocomplete="email" inputmode="email" placeholder="Masukkan email HP Anda (contoh: nama@gmail.com)" style="flex:1;min-width:190px;padding:7px">
-              <button type="button" class="btn alt sm" id="btnSaveDashEmail">Simpan Email</button>
+              <button type="button" class="btn alt sm" id="btnSaveDashEmail">Simpan</button>
             </div>
-            <div class="muted" style="margin-top:4px">Email perangkat ini otomatis direkam saat melapor &amp; memfilter Pelaporan Saya.</div>
+            <div class="muted" style="margin-top:4px">Pilih nama &amp; email HP Anda agar otomatis terhubung dengan sheet Nama Karyawan &amp; Pelaporan Saya.</div>
           </div>
         </div>
       </div>
@@ -304,6 +308,7 @@ const PIN_KEY = 'dumpedia_pengaduan_pin_v1';
 const API_URL_KEY = 'dumpedia_pengaduan_api_url_v1';
 const USERS_CACHE_KEY = 'pengaduan_users_cache_v1';
 const REPORTER_EMAIL_KEY = 'pelaporan_karyawan_email_v1';
+const REPORTER_PROFILE_KEY = 'pelaporan_karyawan_profile_v1';
 
 function getReporterEmail() {
   return (localStorage.getItem(REPORTER_EMAIL_KEY) || '').trim();
@@ -317,6 +322,20 @@ function saveReporterEmail(email) {
     localStorage.setItem(REPORTER_EMAIL_KEY, clean);
   } else {
     localStorage.removeItem(REPORTER_EMAIL_KEY);
+  }
+}
+function getReporterProfile() {
+  try { return JSON.parse(localStorage.getItem(REPORTER_PROFILE_KEY) || 'null'); } catch (e) { return null; }
+}
+function saveReporterProfile(p) {
+  if (p && (p.employeeId || p.name)) {
+    localStorage.setItem(REPORTER_PROFILE_KEY, JSON.stringify({
+      cabang: p.cabang || '',
+      employeeId: p.employeeId || '',
+      name: p.name || ''
+    }));
+  } else {
+    localStorage.removeItem(REPORTER_PROFILE_KEY);
   }
 }
 
@@ -360,66 +379,87 @@ function getGuestUser() {
   const fromSheet = knownUsers.find(u => String(u.role || '').trim().toUpperCase() === 'KARYAWAN');
   const base = fromSheet || GUEST_FALLBACK;
   const devEmail = getReporterEmail();
-  return devEmail ? { ...base, email: devEmail } : base;
+  const prof = getReporterProfile();
+  let emp = null;
+  if (typeof employees !== 'undefined' && employees.length) {
+    if (devEmail) emp = employees.find(e => String(e.email || '').trim().toLowerCase() === devEmail.toLowerCase());
+    if (!emp && prof && prof.employeeId) emp = employees.find(e => String(e.employeeId || '').trim().toLowerCase() === String(prof.employeeId).trim().toLowerCase());
+  }
+  const email = devEmail || (emp && emp.email) || base.email;
+  const name = emp ? emp.name : (prof && prof.name ? prof.name : base.name);
+  const dept = emp ? (emp.cabang || base.dept) : (prof && prof.cabang ? prof.cabang : base.dept);
+  return {
+    ...base,
+    email: email,
+    name: name,
+    dept: dept,
+    cabang: emp ? emp.cabang : (prof ? prof.cabang : ''),
+    employeeId: emp ? emp.employeeId : (prof ? prof.employeeId : ''),
+    role: 'KARYAWAN'
+  };
 }
 
+const KARYAWAN_MODE = '__KARYAWAN__';
+
 function getCurrentDemoUser() {
-  const savedEmail = String(localStorage.getItem(USER_KEY) || '').trim().toLowerCase();
-  const guest = getGuestUser();
-  const list = [guest, ...knownUsers.filter(x => x.role !== 'KARYAWAN')];
-  const u = list.find(x => String(x.email || '').trim().toLowerCase() === savedEmail) || guest;
-  return { ...u, pin: sessionStorage.getItem(PIN_KEY) || '' };
+  const savedKey = String(localStorage.getItem(USER_KEY) || '').trim();
+  const guest = { ...getGuestUser(), role: 'KARYAWAN', pin: '' };
+  if (!savedKey || savedKey === KARYAWAN_MODE) return guest;
+  const staff = knownUsers.filter(x => String(x.role || '').trim().toUpperCase() !== 'KARYAWAN');
+  const u = staff.find(x => String(x.email || '').trim().toLowerCase() === savedKey.toLowerCase());
+  return u ? { ...u, pin: sessionStorage.getItem(PIN_KEY) || '' } : guest;
 }
 
 function resetToGuest() {
-  const guest = getGuestUser();
-  localStorage.setItem(USER_KEY, guest.email);
+  localStorage.setItem(USER_KEY, KARYAWAN_MODE);
   sessionStorage.removeItem(PIN_KEY);
   initUserSwitcher();
 }
 
 function initUserSwitcher() {
-  const guest = getGuestUser();
+  const guest = (state.user && state.user.role === 'KARYAWAN') ? state.user : getGuestUser();
   const staffList = knownUsers.filter(u => String(u.role || '').trim().toUpperCase() !== 'KARYAWAN');
-  const list = [{ ...guest, name: 'Karyawan', role: 'KARYAWAN' }, ...staffList];
-  const sig = (knownUsers.length ? '1|' : '0|') + JSON.stringify(list.map(u => [u.email, u.name, u.role]));
+  const list = [{ key: KARYAWAN_MODE, email: guest.email, name: guest.name || 'Karyawan', role: 'KARYAWAN' }, ...staffList.map(u => ({ ...u, key: u.email }))];
+  const sig = (knownUsers.length ? '1|' : '0|') + JSON.stringify(list.map(u => [u.key, u.name, u.role]));
   const current = getCurrentDemoUser();
-  const label = u => u.role === 'KARYAWAN' ? 'Karyawan (Umum)' : `${u.name} (${u.role})`;
+  const label = u => u.role === 'KARYAWAN' ? (u.name && u.name !== 'Karyawan' ? `${u.name} (KARYAWAN)` : 'Karyawan (Umum)') : `${u.name} (${u.role})`;
 
   if (sig !== lastUsersSig) {
     lastUsersSig = sig;
-    let html = list.map(u => `<option value="${esc(u.email)}">${esc(label(u))}</option>`).join('');
+    let html = list.map(u => `<option value="${esc(u.key)}">${esc(label(u))}</option>`).join('');
     if (!knownUsers.length && getApiUrl()) {
       html += '<option disabled>Memuat daftar akun...</option>';
     }
     $('userSwitcher').innerHTML = html;
   }
-  const matchOpt = Array.from($('userSwitcher').options).find(o => o.value.toLowerCase() === String(current.email || '').toLowerCase());
-  $('userSwitcher').value = matchOpt ? matchOpt.value : guest.email;
+  const activeKey = current.role === 'KARYAWAN' ? KARYAWAN_MODE : current.email;
+  const matchOpt = Array.from($('userSwitcher').options).find(o => o.value.toLowerCase() === String(activeKey || '').toLowerCase());
+  $('userSwitcher').value = matchOpt ? matchOpt.value : KARYAWAN_MODE;
 
   $('userSwitcher').onchange = e => {
-    const selectedEmail = String(e.target.value || '').trim().toLowerCase();
-    const target = list.find(u => String(u.email || '').trim().toLowerCase() === selectedEmail) || guest;
+    const selectedVal = String(e.target.value || '').trim();
+    const target = list.find(u => u.key.toLowerCase() === selectedVal.toLowerCase()) || list[0];
     if (target.role === 'KARYAWAN') {
       // Pindah ke Karyawan langsung instan (0ms), lalu sinkron di latar belakang
       refreshSeq++;
-      localStorage.setItem(USER_KEY, guest.email);
+      const activeGuest = getGuestUser();
+      localStorage.setItem(USER_KEY, KARYAWAN_MODE);
       sessionStorage.removeItem(PIN_KEY);
       $('thread').classList.add('hidden');
       $('picdetail').classList.add('hidden');
       clearError();
       const prevComplaints = state.complaints || [];
       const prevNotifs = state.notifications || [];
-      const filteredComplaints = prevComplaints.filter(c => canSeeComplaint(guest, c));
+      const filteredComplaints = prevComplaints.filter(c => canSeeComplaint(activeGuest, c));
       const ids = new Set(filteredComplaints.map(c => String(c.id)));
-      state = { ...state, user: guest, complaints: filteredComplaints, notifications: prevNotifs.filter(n => ids.has(String(n.ticket))) };
-      $('who').textContent = guest.name + ' · ' + guest.email + ' · KARYAWAN';
-      $('account').textContent = guest.name + ' / ' + guest.dept + ' / KARYAWAN';
-      syncEmailUi(guest);
+      state = { ...state, user: activeGuest, complaints: filteredComplaints, notifications: prevNotifs.filter(n => ids.has(String(n.ticket))) };
+      $('who').textContent = activeGuest.name + ' · ' + activeGuest.email + ' · KARYAWAN';
+      $('account').textContent = activeGuest.name + ' / ' + activeGuest.dept + ' / KARYAWAN';
+      syncEmailUi(activeGuest);
       document.querySelector('[data-page="monitor"]').classList.add('hidden');
       if (!$('page-monitor').classList.contains('hidden')) go('dashboard');
       else render();
-      toast('Masuk sebagai Karyawan');
+      toast('Masuk sebagai ' + (activeGuest.name && activeGuest.name !== 'Karyawan' ? activeGuest.name : 'Karyawan'));
       if (getApiUrl()) refresh(null, { silent: true });
       return;
     }
@@ -853,15 +893,9 @@ function applyBootstrapData(d) {
   const ids = new Set(d.complaints.map(c => String(c.id)));
   d.notifications = (d.notifications || []).filter(n => ids.has(String(n.ticket)));
   state = d;
-  if (d.users && d.users.length) {
-    knownUsers = d.users;
-    try { localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(d.users)); } catch (e) {}
-    if (u.role === 'KARYAWAN') localStorage.setItem(USER_KEY, u.email);
-    initUserSwitcher();
+  if (u.role === 'KARYAWAN' && u.name && u.name !== 'Karyawan') {
+    saveReporterProfile({ cabang: u.cabang || u.dept || '', employeeId: u.employeeId || '', name: u.name });
   }
-  $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
-  $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
-  syncEmailUi(u);
   if (d.employees && d.employees.length) {
     employeesSyncedFromServer = true;
     try { localStorage.setItem('dumpedia_employees_cache_v1', JSON.stringify(d.employees)); } catch (e) {}
@@ -869,6 +903,15 @@ function applyBootstrapData(d) {
   } else if (!employees.length) {
     initEmployeeForm(SAMPLE_EMPLOYEES);
   }
+  if (d.users && d.users.length) {
+    knownUsers = d.users;
+    try { localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(d.users)); } catch (e) {}
+    if (u.role === 'KARYAWAN') localStorage.setItem(USER_KEY, KARYAWAN_MODE);
+    initUserSwitcher();
+  }
+  $('who').textContent = u.name + ' · ' + u.email + ' · ' + u.role;
+  $('account').textContent = u.name + ' / ' + u.dept + ' / ' + u.role;
+  syncEmailUi(u);
   // Monitoring PIC hanya untuk staff terverifikasi server (OPS, HC, ADMIN, ATASAN)
   const staff = isStaff(String(u.role || '').trim().toUpperCase());
   document.querySelector('[data-page="monitor"]').classList.toggle('hidden', !staff);
@@ -944,6 +987,24 @@ let employees = [];
 let employeesSyncedFromServer = false;
 let lastEmployeesSig = '';
 
+function populateNamesFor(cabangSel, nameSel) {
+  const cab = cabangSel.value;
+  const list = employees.filter(e => e.cabang === cab).sort((a, b) => a.name.localeCompare(b.name));
+  nameSel.innerHTML = '<option value="">' + (cab ? '-- Pilih nama karyawan --' : '-- Pilih cabang dulu --') + '</option>' +
+    list.map(e => `<option value="${esc(e.employeeId)}">${esc(e.name)}</option>`).join('');
+}
+
+function selectEmployeeOn(cabangSel, nameSel, empIdEl, cabang, empId) {
+  if (cabang && Array.from(cabangSel.options).some(o => o.value === cabang)) {
+    cabangSel.value = cabang;
+    populateNamesFor(cabangSel, nameSel);
+  }
+  if (empId && Array.from(nameSel.options).some(o => o.value === empId)) {
+    nameSel.value = empId;
+    if (empIdEl) empIdEl.value = empId;
+  }
+}
+
 function initEmployeeForm(list) {
   employees = list || [];
   const sig = JSON.stringify(employees);
@@ -952,31 +1013,91 @@ function initEmployeeForm(list) {
   const prevCabang = $('cabang').value;
   const prevEmpId = $('name').value;
   const cabangs = [...new Set(employees.map(e => e.cabang).filter(Boolean))].sort();
-  $('cabang').innerHTML = '<option value="">-- Pilih cabang --</option>' + cabangs.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const cabHtml = '<option value="">-- Pilih cabang --</option>' + cabangs.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('cabang').innerHTML = cabHtml;
+  $('dashCabang').innerHTML = cabHtml;
   if (cabangs.includes(prevCabang)) $('cabang').value = prevCabang;
   fillNames();
   if (prevEmpId && Array.from($('name').options).some(o => o.value === prevEmpId)) {
     $('name').value = prevEmpId;
     $('employeeId').value = prevEmpId;
+  } else if (!state.user || state.user.role === 'KARYAWAN') {
+    const prof = (state.user && state.user.employeeId) ? state.user : getGuestUser();
+    selectEmployeeOn($('cabang'), $('name'), $('employeeId'), prof.cabang || prof.dept, prof.employeeId);
   }
+  populateNamesFor($('dashCabang'), $('dashName'));
+  const g = (state.user && state.user.role === 'KARYAWAN') ? state.user : getGuestUser();
+  selectEmployeeOn($('dashCabang'), $('dashName'), null, g.cabang || g.dept, g.employeeId);
 }
 
 function fillNames() {
-  const cab = $('cabang').value;
-  const list = employees.filter(e => e.cabang === cab).sort((a, b) => a.name.localeCompare(b.name));
-  $('name').innerHTML = '<option value="">' + (cab ? '-- Pilih nama karyawan --' : '-- Pilih cabang dulu --') + '</option>' +
-    list.map(e => `<option value="${esc(e.employeeId)}">${esc(e.name)}</option>`).join('');
+  populateNamesFor($('cabang'), $('name'));
   $('employeeId').value = '';
+}
+
+function syncEmailToEmployeeSheet(emp, email) {
+  if (!emp || !isValidEmail(email)) return;
+  const clean = email.trim();
+  if (String(emp.email || '').trim().toLowerCase() === clean.toLowerCase()) return;
+  emp.email = clean;
+  lastEmployeesSig = JSON.stringify(employees);
+  try { localStorage.setItem('dumpedia_employees_cache_v1', lastEmployeesSig); } catch (e) {}
+  if (getApiUrl()) {
+    call('apiSaveEmployeeEmail', { employeeId: emp.employeeId, name: emp.name, cabang: emp.cabang, email: clean }, null, { silent: true, onError: () => {} });
+  }
+}
+
+function applyKaryawanIdentity(emp, emailOverride) {
+  if (!emp) return;
+  const chosenEmail = emailOverride || emp.email || getReporterEmail() || (state.user ? state.user.email : '') || getGuestUser().email;
+  const prevEmail = state.user ? String(state.user.email || '').trim().toLowerCase() : '';
+  saveReporterProfile({ cabang: emp.cabang, employeeId: emp.employeeId, name: emp.name });
+  if (isValidEmail(chosenEmail)) saveReporterEmail(chosenEmail);
+  const updated = {
+    ...(state.user || getGuestUser()),
+    name: emp.name,
+    dept: emp.cabang || 'Karyawan',
+    cabang: emp.cabang,
+    employeeId: emp.employeeId,
+    email: chosenEmail,
+    role: 'KARYAWAN'
+  };
+  state.user = updated;
+  $('who').textContent = updated.name + ' · ' + updated.email + ' · ' + updated.role;
+  $('account').textContent = updated.name + ' / ' + updated.dept + ' / ' + updated.role;
+  initUserSwitcher();
+  syncEmailUi(updated);
+  if (prevEmail && isValidEmail(chosenEmail) && prevEmail !== chosenEmail.toLowerCase()) {
+    refresh(null, { silent: true });
+  }
 }
 
 $('cabang').onchange = fillNames;
 $('name').onchange = () => {
-  $('employeeId').value = $('name').value;
-  if (state.user && state.user.role === 'KARYAWAN' && !$('reporterEmail').value.trim()) {
-    const saved = getReporterEmail();
-    if (saved) $('reporterEmail').value = saved;
-    updateRememberLabel();
+  const empId = $('name').value;
+  $('employeeId').value = empId;
+  if (state.user && state.user.role !== 'KARYAWAN') return;
+  const cab = $('cabang').value;
+  const emp = employees.find(e => e.employeeId === empId && e.cabang === cab);
+  if (!emp) return;
+  const emailToUse = emp.email || ($('reporterEmail').value.trim()) || getReporterEmail();
+  if (emp.email && $('rememberEmail').checked) {
+    $('reporterEmail').value = emp.email;
+  } else if (!$('reporterEmail').value.trim() && emailToUse) {
+    $('reporterEmail').value = emailToUse;
   }
+  updateRememberLabel();
+  applyKaryawanIdentity(emp, emp.email || (isValidEmail($('reporterEmail').value) ? $('reporterEmail').value.trim() : ''));
+  selectEmployeeOn($('dashCabang'), $('dashName'), null, emp.cabang, emp.employeeId);
+  if (isValidEmail($('reporterEmail').value) && !emp.email) {
+    syncEmailToEmployeeSheet(emp, $('reporterEmail').value.trim());
+  }
+};
+
+$('dashCabang').onchange = () => populateNamesFor($('dashCabang'), $('dashName'));
+$('dashName').onchange = () => {
+  const emp = employees.find(e => e.employeeId === $('dashName').value && e.cabang === $('dashCabang').value);
+  if (emp && emp.email) $('dashEmailInput').value = emp.email;
 };
 
 function updateRememberLabel() {
@@ -992,10 +1113,11 @@ function syncEmailUi(u) {
   $('deviceEmailBox').classList.toggle('hidden', !isEmp);
   $('rememberEmailWrap').classList.toggle('hidden', !isEmp);
   if (isEmp) {
-    const saved = getReporterEmail();
+    const saved = getReporterEmail() || (isValidEmail(activeUser.email) && activeUser.email !== GUEST_FALLBACK.email ? activeUser.email : '');
     $('dashEmailInput').value = saved;
-    $('reporterEmail').value = saved;
+    if (!$('reporterEmail').value.trim() || $('reporterEmail').value.trim() === saved) $('reporterEmail').value = saved;
     $('rememberEmail').checked = true;
+    selectEmployeeOn($('dashCabang'), $('dashName'), null, activeUser.cabang || activeUser.dept, activeUser.employeeId);
   } else {
     $('reporterEmail').value = activeUser.email || '';
   }
@@ -1003,6 +1125,18 @@ function syncEmailUi(u) {
 }
 
 $('reporterEmail').oninput = updateRememberLabel;
+$('reporterEmail').onchange = () => {
+  if (state.user && state.user.role !== 'KARYAWAN') return;
+  const val = $('reporterEmail').value.trim();
+  if (!isValidEmail(val)) return;
+  if ($('rememberEmail').checked) saveReporterEmail(val);
+  const emp = employees.find(e => e.employeeId === $('name').value && e.cabang === $('cabang').value);
+  if (emp) {
+    syncEmailToEmployeeSheet(emp, val);
+    applyKaryawanIdentity(emp, val);
+  }
+};
+
 $('btnSaveDashEmail').onclick = () => {
   const val = $('dashEmailInput').value.trim();
   if (!isValidEmail(val)) {
@@ -1010,12 +1144,44 @@ $('btnSaveDashEmail').onclick = () => {
     $('dashEmailInput').focus();
     return;
   }
+  const emp = employees.find(e => e.employeeId === $('dashName').value && e.cabang === $('dashCabang').value);
   saveReporterEmail(val);
-  const g = getGuestUser();
-  localStorage.setItem(USER_KEY, g.email);
-  initUserSwitcher();
-  toast('Email perangkat disimpan: ' + val);
-  refresh();
+  localStorage.setItem(USER_KEY, KARYAWAN_MODE);
+  const doneSync = () => {
+    toast('Data tersimpan: ' + (emp ? emp.name + ' · ' : '') + val);
+    refresh();
+  };
+  if (emp) {
+    saveReporterProfile({ cabang: emp.cabang, employeeId: emp.employeeId, name: emp.name });
+    selectEmployeeOn($('cabang'), $('name'), $('employeeId'), emp.cabang, emp.employeeId);
+    $('reporterEmail').value = val;
+    updateRememberLabel();
+    const needSheetWrite = getApiUrl() && String(emp.email || '').trim().toLowerCase() !== val.toLowerCase();
+    emp.email = val;
+    lastEmployeesSig = JSON.stringify(employees);
+    try { localStorage.setItem('dumpedia_employees_cache_v1', lastEmployeesSig); } catch (e) {}
+    initUserSwitcher();
+    if (needSheetWrite) {
+      const btn = $('btnSaveDashEmail');
+      btn.disabled = true;
+      btn.textContent = 'Menyimpan...';
+      call('apiSaveEmployeeEmail', { employeeId: emp.employeeId, name: emp.name, cabang: emp.cabang, email: val }, () => {
+        btn.disabled = false;
+        btn.textContent = 'Simpan';
+        doneSync();
+      }, {
+        onError: err => {
+          btn.disabled = false;
+          btn.textContent = 'Simpan';
+          fail(err);
+        }
+      });
+      return;
+    }
+  } else {
+    initUserSwitcher();
+  }
+  doneSync();
 };
 
 function setCategory(c) {
@@ -1050,8 +1216,7 @@ $('quick').onclick = () => go('form');
 $('date').value = new Date().toISOString().slice(0, 10);
 setCategory('Operasional');
 // Saat aplikasi dibuka selalu mulai sebagai Karyawan (umum); staf harus memilih akun & PIN lagi
-const initialGuest = getGuestUser();
-localStorage.setItem(USER_KEY, initialGuest.email);
+localStorage.setItem(USER_KEY, KARYAWAN_MODE);
 sessionStorage.removeItem(PIN_KEY);
 try {
   const cachedEmp = JSON.parse(localStorage.getItem('dumpedia_employees_cache_v1') || 'null');
@@ -1172,13 +1337,8 @@ $('form').onsubmit = e => {
   const isEmp = !state.user || state.user.role === 'KARYAWAN';
   const prevEmail = state.user ? String(state.user.email || '').trim().toLowerCase() : '';
   if (isEmp) {
-    if ($('rememberEmail').checked) {
-      saveReporterEmail(repEmail);
-      localStorage.setItem(USER_KEY, repEmail);
-    } else {
-      saveReporterEmail('');
-      localStorage.setItem(USER_KEY, getGuestUser().email);
-    }
+    saveReporterEmail($('rememberEmail').checked ? repEmail : '');
+    localStorage.setItem(USER_KEY, KARYAWAN_MODE);
   }
   const d = {
     category: state.category,
@@ -1202,23 +1362,44 @@ $('form').onsubmit = e => {
     btn.disabled = false;
     btn.textContent = 'Kirim Pelaporan';
     toast('Pelaporan terkirim. Nomor tiket: ' + r.id);
+    const submittedEmp = employees.find(x => x.employeeId === d.employeeId && x.cabang === d.cabang);
+    if (isEmp && submittedEmp) {
+      submittedEmp.email = repEmail;
+      lastEmployeesSig = JSON.stringify(employees);
+      try { localStorage.setItem('dumpedia_employees_cache_v1', lastEmployeesSig); } catch (e) {}
+    }
     $('form').reset();
     clearFormProofFile();
     fillNames();
     $('date').value = new Date().toISOString().slice(0, 10);
     if (isEmp && $('rememberEmail').checked) {
-      const updatedUser = { ...(state.user || getGuestUser()), email: repEmail };
+      if (submittedEmp) saveReporterProfile({ cabang: submittedEmp.cabang, employeeId: submittedEmp.employeeId, name: submittedEmp.name });
+      const updatedUser = {
+        ...(state.user || getGuestUser()),
+        email: repEmail,
+        name: d.name || (state.user ? state.user.name : 'Karyawan'),
+        dept: d.cabang || (state.user ? state.user.dept : 'Karyawan'),
+        cabang: d.cabang || '',
+        employeeId: d.employeeId || ''
+      };
       state.user = updatedUser;
       initUserSwitcher();
       $('who').textContent = updatedUser.name + ' · ' + updatedUser.email + ' · ' + updatedUser.role;
       $('account').textContent = updatedUser.name + ' / ' + updatedUser.dept + ' / ' + updatedUser.role;
+      selectEmployeeOn($('cabang'), $('name'), $('employeeId'), d.cabang, d.employeeId);
+      if (prevEmail !== repEmail.toLowerCase()) {
+        state.complaints = (state.complaints || []).filter(c => canSeeComplaint(updatedUser, c));
+        const ids = new Set(state.complaints.map(c => String(c.id)));
+        state.notifications = (state.notifications || []).filter(n => ids.has(String(n.ticket)));
+      }
     }
     syncEmailUi(state.user);
-    if (isEmp && prevEmail !== repEmail.toLowerCase()) {
-      refresh(() => go('mine'));
-    } else if (r.complaint || r.notification) {
+    if (r.complaint || r.notification) {
       applyLocalUpdate(r, r.id);
       go('mine');
+      if (isEmp && prevEmail !== repEmail.toLowerCase()) {
+        refresh(null, { silent: true });
+      }
     } else {
       refresh(() => go('mine'));
     }
@@ -1243,7 +1424,7 @@ function renderThreadView(x, messages) {
     <p>Status: <span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></p>
     ${pelaporProof ? `<p>${pelaporProof}</p>` : ''}
     <div class="notice"><b>Hasil Penyelesaian:</b><br>${esc(x.result || 'Belum ada hasil penyelesaian.')}${picProof ? `<br>${picProof}` : ''}</div>
-    ${messages.map(m => `<div class="bubble ${state.user && m.by === state.user.name ? 'mine' : ''}"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('')}
+    ${messages.map(m => `<div class="bubble ${state.user && (m.by === state.user.name || (state.user.role === 'KARYAWAN' && m.role === 'KARYAWAN')) ? 'mine' : ''}"><b>${esc(m.by)} (${esc(m.role)})</b><p>${esc(m.text)}</p><small class="muted">${esc(m.date)}</small></div>`).join('')}
     <div class="field"><textarea id="replymsg" placeholder="Balas pesan PIC..."></textarea></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="sendMessage('${esc(x.id)}')">Kirim pesan</button>
