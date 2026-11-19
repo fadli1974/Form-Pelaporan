@@ -215,7 +215,7 @@ th{color:var(--muted)}
     <section id="page-monitor" class="hidden">
       <div class="card">
         <div class="cols">
-          <input id="query" placeholder="Cari ID, pelapor, judul, nomor unit">
+          <input id="query" placeholder="Cari ID, pelapor, judul, nomor unit, PIC">
           <select id="filter">
             <option value="">Semua status</option>
             <option>Belum Diproses</option>
@@ -227,7 +227,7 @@ th{color:var(--muted)}
         <div class="tablewrap">
           <table>
             <thead>
-              <tr><th>ID</th><th>Kategori</th><th>Pelapor</th><th>Pelaporan</th><th>Status</th><th></th></tr>
+              <tr><th>ID</th><th>Kategori</th><th>Pelapor</th><th>Pelaporan</th><th>PIC / Ditugaskan</th><th>Status</th><th></th></tr>
             </thead>
             <tbody id="rows"></tbody>
           </table>
@@ -980,8 +980,8 @@ function render() {
   ).join('') || '<p class="muted">Belum ada pelaporan.</p>';
 
   let q = ($('query').value || '').toLowerCase(), f = $('filter').value;
-  $('rows').innerHTML = a.filter(x => (!f || x.status === f) && [x.id, x.name, x.title, x.unit].join(' ').toLowerCase().includes(q)).slice().reverse().map(x =>
-    `<tr><td>${esc(x.id)}</td><td>${esc(x.category)}</td><td>${esc(x.name)}</td><td>${esc(x.title)}<br><span class="muted">${esc(x.unit)}</span></td><td><span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></td><td><button class="btn alt sm" onclick="openPic('${esc(x.id)}')">Detail</button></td></tr>`
+  $('rows').innerHTML = a.filter(x => (!f || x.status === f) && [x.id, x.name, x.title, x.unit, x.picName].join(' ').toLowerCase().includes(q)).slice().reverse().map(x =>
+    `<tr><td>${esc(x.id)}</td><td>${esc(x.category)}</td><td>${esc(x.name)}</td><td>${esc(x.title)}<br><span class="muted">${esc(x.unit)}</span></td><td>${esc(x.picName || '-')}</td><td><span class="pill ${statusClass(x.status)}">${esc(x.status)}</span></td><td><button class="btn alt sm" onclick="openPic('${esc(x.id)}')">Detail</button></td></tr>`
   ).join('');
 
   $('notes').innerHTML = (state.notifications || []).map(n =>
@@ -1536,7 +1536,7 @@ function renderPicView(x, messages) {
       <b>${esc(x.id)} · ${esc(x.title)}</b>
       <button type="button" class="btn alt sm" onclick="$('picdetail').classList.add('hidden');$('picdetail').innerHTML=''">✕ Tutup</button>
     </div>
-    <p class="muted">Pelapor: ${esc(x.name)} · ID: ${esc(x.employeeId || '-')} · Cabang: ${esc(x.cabang || x.dept)} · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
+    <p class="muted">Pelapor: ${esc(x.name)} · ID: ${esc(x.employeeId || '-')} · Cabang: ${esc(x.cabang || x.dept)} · PIC: <b>${esc(x.picName || '-')}</b> · Prioritas: <b>${esc(x.priority)}</b> · Unit: ${esc(x.unit)}</p>
     <div class="notice">${esc(x.detail)}${pelaporProof ? `<br><br>${pelaporProof}` : ''}</div>
     <div class="field"><label>Status</label><select id="picstatus">${['Belum Diproses', 'Dalam Proses', 'Menunggu Konfirmasi Karyawan', 'Selesai'].map(s => `<option ${s === x.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
     <div class="field"><label>Hasil penyelesaian / jawaban untuk karyawan</label><textarea id="picresult">${esc(x.result || '')}</textarea></div>
