@@ -309,6 +309,28 @@ const API_URL_KEY = 'dumpedia_pengaduan_api_url_v1';
 const USERS_CACHE_KEY = 'pengaduan_users_cache_v1';
 const REPORTER_EMAIL_KEY = 'pelaporan_karyawan_email_v1';
 const REPORTER_PROFILE_KEY = 'pelaporan_karyawan_profile_v1';
+const CATEGORIES_CACHE_KEY = 'pelaporan_categories_cache_v1';
+const DEFAULT_CATEGORIES = {
+  Operasional: [
+    { type: 'Kerusakan Unit', name: '', role: 'OPS' },
+    { type: 'Dokumen Kendaraan', name: '', role: 'OPS' },
+    { type: 'Pajak / STNK / KIR', name: '', role: 'OPS' },
+    { type: 'Kendala lainnya', name: '', role: 'OPS' }
+  ],
+  HC: [
+    { type: 'Kurang Gaji', name: '', role: 'HC' },
+    { type: 'Absensi', name: '', role: 'HC' },
+    { type: 'BPJS Ketenagakerjaan', name: '', role: 'HC' },
+    { type: 'BPJS Kesehatan', name: '', role: 'HC' }
+  ]
+};
+let categoryData = DEFAULT_CATEGORIES;
+try {
+  const cachedCats = JSON.parse(localStorage.getItem(CATEGORIES_CACHE_KEY) || 'null');
+  if (cachedCats && ((cachedCats.Operasional && cachedCats.Operasional.length) || (cachedCats.HC && cachedCats.HC.length))) {
+    categoryData = cachedCats;
+  }
+} catch (e) {}
 
 function getReporterEmail() {
   return (localStorage.getItem(REPORTER_EMAIL_KEY) || '').trim();
@@ -901,6 +923,11 @@ function applyBootstrapData(d) {
   if (u.role === 'KARYAWAN' && u.name && u.name !== 'Karyawan') {
     saveReporterProfile({ cabang: u.cabang || u.dept || '', employeeId: u.employeeId || '', name: u.name });
   }
+  if (d.categories && ((d.categories.Operasional && d.categories.Operasional.length) || (d.categories.HC && d.categories.HC.length))) {
+    categoryData = d.categories;
+    try { localStorage.setItem(CATEGORIES_CACHE_KEY, JSON.stringify(d.categories)); } catch (e) {}
+    setCategory(state.category);
+  }
   if (d.employees && d.employees.length) {
     employeesSyncedFromServer = true;
     try { localStorage.setItem('dumpedia_employees_cache_v1', JSON.stringify(d.employees)); } catch (e) {}
@@ -1188,14 +1215,27 @@ $('btnSaveDashEmail').onclick = () => {
 };
 
 function setCategory(c) {
+  const prevCat = state.category;
+  const prevType = $('type').value;
   state.category = c;
   $('formtitle').textContent = 'Form Pelaporan ' + c;
   $('unitfield').classList.toggle('hidden', c === 'HC');
   document.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('selected', x.dataset.cat === c));
-  $('type').innerHTML = (c === 'HC'
-    ? ['Kendala absensi', 'Payroll', 'Cuti dan izin', 'BPJS', 'Administrasi karyawan', 'Kendala lainnya']
-    : ['Perbaikan kendaraan', 'Kerusakan unit', 'Dokumen kendaraan', 'Pajak / STNK / KIR', 'Kendala lainnya']
-  ).map(x => `<option>${x}</option>`).join('');
+  const rawList = (categoryData && categoryData[c] && categoryData[c].length) ? categoryData[c] : (DEFAULT_CATEGORIES[c] || []);
+  const seen = new Set();
+  const list = rawList.filter(item => {
+    const t = String(item.type || item || '').trim();
+    if (!t || seen.has(t.toLowerCase())) return false;
+    seen.add(t.toLowerCase());
+    return true;
+  });
+  $('type').innerHTML = list.map(item => {
+    const t = String(item.type || item || '').trim();
+    return `<option value="${esc(t)}">${esc(t)}</option>`;
+  }).join('');
+  if (prevCat === c && prevType && Array.from($('type').options).some(o => o.value === prevType)) {
+    $('type').value = prevType;
+  }
 }
 
 // Format otomatis nomor polisi: huruf besar + spasi (contoh: B 1234 ABC)
